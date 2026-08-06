@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from 'react';
 import { ServiceRow } from './ServiceRow';
-import { StatusIcon } from './StatusIcon';
+import { StatusBadge } from './StatusBadge';
 import { Timeline } from './Timeline';
 import {
   localized,
@@ -11,7 +11,7 @@ import {
   uptime,
   type RangeHours,
 } from '@/lib/status';
-import { fill, type Dict } from '@/lib/i18n';
+import type { Dict } from '@/lib/i18n';
 import type {
   Category,
   Lang,
@@ -64,7 +64,7 @@ export function CategoryCard({
 
   return (
     <section className="overflow-hidden rounded-lg border border-line bg-surface">
-      <div className="px-4 py-3 sm:px-5">
+      <div className="px-4 py-3.5 sm:px-5">
         <button
           type="button"
           onClick={() => setExpanded((open) => !open)}
@@ -88,27 +88,28 @@ export function CategoryCard({
             <path d="m5 3 6 5-6 5" />
           </svg>
 
-          <StatusIcon status={status} size={14} />
-
           <h3 className="min-w-0 flex-1 truncate text-base font-semibold">
             {localized(category.name, lang)}
           </h3>
 
-          <span className="shrink-0 text-xs text-fg-muted">{dict.status[status]}</span>
-          {rate !== null && (
-            <span className="shrink-0 text-xs tabular-nums text-fg-subtle">
-              {rate.toFixed(rate === 100 ? 0 : 2)}%
-            </span>
-          )}
+          {/* 状態と稼働率は行を分ける。並べると数字がどちらの値か読み取りにくい */}
+          <span className="flex shrink-0 flex-col items-end gap-1">
+            <StatusBadge status={status} dict={dict} />
+            {rate !== null && (
+              <span className="text-xs tabular-nums text-fg-subtle">
+                {rate.toFixed(rate === 100 ? 0 : 2)}%
+              </span>
+            )}
+          </span>
         </button>
 
         {description && (
-          <p className="mt-1.5 pl-6 text-sm leading-relaxed text-fg-muted">
+          <p className="mt-2 pl-5 text-sm leading-relaxed text-fg-muted">
             {description}
           </p>
         )}
 
-        <div className="mt-2 pl-6 flex flex-wrap items-center gap-x-4 gap-y-1.5">
+        <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1.5 pl-5">
           {/*
             カード全体をリンクにしない。開閉はボタン、遷移はこのリンクだけ。
             稼働状況を見に来ただけの人が誤ってサービス本体に飛ぶのを防ぐ。
@@ -125,31 +126,31 @@ export function CategoryCard({
             </a>
           )}
 
+          {/* 数字だけ置くと何の値か分からないので、必ずラベルを付ける */}
           {version && (
-            <span className="inline-flex items-center gap-2 text-xs text-fg-subtle">
-              <span title={`${dict.version}: ${version.imageTag}`} className="tabular-nums">
-                {version.version}
-              </span>
-              {version.release && (
+            <span className="text-xs text-fg-subtle">
+              {dict.version}:{' '}
+              {version.release ? (
                 <a
                   href={version.release.url}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="inline-flex items-center gap-1 rounded text-accent hover:underline"
+                  title={`${dict.releaseNotes}（${version.imageTag}）`}
+                  className="inline-flex items-center gap-1 rounded tabular-nums text-accent hover:underline"
                 >
-                  {dict.releaseNotes}
+                  {version.version}
                   <ExternalIcon />
                 </a>
+              ) : (
+                <span className="tabular-nums" title={version.imageTag}>
+                  {version.version}
+                </span>
               )}
             </span>
           )}
-
-          <span className="text-xs text-fg-subtle">
-            {fill(dict.componentCount, { n: services.length })}
-          </span>
         </div>
 
-        <div className="mt-2.5 pl-6">
+        <div className="mt-3 pl-5">
           <Timeline
             history={merged}
             hours={hours}

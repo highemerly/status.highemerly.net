@@ -1,6 +1,6 @@
 'use client';
 
-import { StatusIcon } from './StatusIcon';
+import { LiveDot } from './StatusBadge';
 import { fill, formatTime, type Dict } from '@/lib/i18n';
 import type { Lang, ServiceStatus } from '@/lib/types';
 
@@ -32,7 +32,7 @@ export function OverallBanner({
   return (
     <div className={`rounded-lg border px-4 py-4 sm:px-5 ${TONE[status]}`}>
       <div className="flex items-center gap-3">
-        <StatusIcon status={status} size={20} />
+        <LiveDot status={status} size={20} />
         <p className="text-base font-semibold sm:text-lg">
           {dict[HEADLINE[status]] as string}
         </p>

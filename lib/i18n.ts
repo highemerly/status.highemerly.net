@@ -47,7 +47,6 @@ const dict = {
     legend: '凡例',
     showDetails: '内訳を見る',
     hideDetails: '内訳を閉じる',
-    componentCount: '{n} コンポーネント',
     legendBar: 'バー1本は{minutes}分ぶんを表します。その間に一度でも問題があれば、悪いほうの色になります。',
   },
   en: {
@@ -92,7 +91,6 @@ const dict = {
     legend: 'Legend',
     showDetails: 'Show breakdown',
     hideDetails: 'Hide breakdown',
-    componentCount: '{n} components',
     legendBar: 'Each bar covers {minutes} minutes. If anything went wrong during that window, the bar shows the worse state.',
   },
 } as const;

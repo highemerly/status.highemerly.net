@@ -43,6 +43,17 @@ const config: Config = {
       maxWidth: {
         page: '56rem',
       },
+      // ステータス表示が「今この瞬間の値」であることを伝えるための脈動。
+      // 常時動くので、目障りにならないよう遅く・薄くしてある。
+      keyframes: {
+        'status-ping': {
+          '0%': { transform: 'scale(1)', opacity: '0.45' },
+          '70%, 100%': { transform: 'scale(2.1)', opacity: '0' },
+        },
+      },
+      animation: {
+        'status-ping': 'status-ping 2.5s cubic-bezier(0, 0, 0.2, 1) infinite',
+      },
     },
   },
   plugins: [],
