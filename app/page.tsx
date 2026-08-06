@@ -49,7 +49,8 @@ export default function HomePage() {
 
     // お知らせとバージョンは補足情報。取れなくても稼働状況は表示する
     try {
-      const res = await fetch('/data/announcements.json');
+      // data/ は Lambda の領域。お知らせは Actions が作るので content/ に置く
+      const res = await fetch('/content/announcements.json');
       if (res.ok) {
         const payload: AnnouncementsPayload = await res.json();
         setAnnouncements(payload.announcements ?? []);

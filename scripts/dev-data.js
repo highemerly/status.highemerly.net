@@ -108,7 +108,7 @@ function write(relative, data) {
 }
 
 write('public/data/status.json', status);
-write('public/data/announcements.json', announcements);
+write('public/content/announcements.json', announcements);
 write('public/config/services.json', config);
 
 // バージョンは scripts/build-versions.js が作る。まだ無ければ飛ばす

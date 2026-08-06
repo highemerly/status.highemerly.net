@@ -66,7 +66,7 @@ IAM → ロール → **ロールを作成** → カスタム信頼ポリシー
 > `repository_dispatch` はいずれもこの `sub` になるため、
 > [`deploy.yml`](../.github/workflows/deploy.yml) の 3 つのトリガー全部で動く。
 
-**アクセス許可ポリシー**（ロール名の例: `github-actions-status-page-deploy`）:
+**アクセス許可ポリシー**（ロール名の例: `status.highemerly.net-github-role`）:
 
 ```json
 {
@@ -104,7 +104,7 @@ IAM → ロール → **ロールを作成** → カスタム信頼ポリシー
 
 | 名前 | 値 |
 |---|---|
-| `AWS_ROLE_ARN` | `arn:aws:iam::<ACCOUNT_ID>:role/github-actions-status-page-deploy` |
+| `AWS_ROLE_ARN` | `arn:aws:iam::<ACCOUNT_ID>:role/status.highemerly.net-github-role` |
 | `S3_BUCKET` | `status-highemerly-net` |
 
 > どちらも秘密情報ではないので Secrets ではなく Variables でよい。
@@ -132,26 +132,38 @@ IAM → ロール → **ロールを作成** → カスタム信頼ポリシー
 
 既存の `UpdateStatusFunction` の実行ロールに以下があることを確認する。
 
+この Lambda が実際に触るのは次の 3 つだけ。それ以上は与えない。
+
+| 対象 | 操作 |
+|---|---|
+| `config/services.json` | 読む |
+| `data/status.json` | 書く |
+| `/status-page/prometheus/*` | 読む（`WithDecryption: true`） |
+
 ```json
 {
   "Version": "2012-10-17",
   "Statement": [
     {
+      "Sid": "ReadConfig",
       "Effect": "Allow",
       "Action": "s3:GetObject",
       "Resource": "arn:aws:s3:::status-highemerly-net/config/services.json"
     },
     {
+      "Sid": "WriteStatus",
       "Effect": "Allow",
-      "Action": ["s3:GetObject", "s3:PutObject"],
-      "Resource": "arn:aws:s3:::status-highemerly-net/data/*"
+      "Action": "s3:PutObject",
+      "Resource": "arn:aws:s3:::status-highemerly-net/data/status.json"
     },
     {
+      "Sid": "ReadPrometheusCredentials",
       "Effect": "Allow",
       "Action": "ssm:GetParameter",
       "Resource": "arn:aws:ssm:ap-northeast-1:<ACCOUNT_ID>:parameter/status-page/prometheus/*"
     },
     {
+      "Sid": "DecryptSecureString",
       "Effect": "Allow",
       "Action": "kms:Decrypt",
       "Resource": "*",
@@ -164,6 +176,33 @@ IAM → ロール → **ロールを作成** → カスタム信頼ポリシー
 ```
 
 CloudWatch Logs への書き込みは `AWSLambdaBasicExecutionRole` で足りる。
+
+### やりがちな広げすぎ
+
+| 書き方 | なぜまずいか |
+|---|---|
+| `s3:PutObject` に `config/*` を含める | Lambda が `services.json` を上書きできてしまう。設定は Actions の領域で、Lambda は読むだけ |
+| `s3:GetObject` に `data/*` を含める | この Lambda は `status.json` を読まない（前回値を見ずに毎回作り直す） |
+| `ssm:GetParameter` を `/status-page/*` にする | Discord 用の公開鍵や GitHub PAT まで読めてしまう。`prometheus/*` に限定する |
+| ARN のアカウント ID を `*` にする | 別アカウントの同名パスまで対象に入る。`<ACCOUNT_ID>` を明記する |
+
+---
+
+### S3 の territory（重要）
+
+**バケット内の書き込み権限は 2 つに分ける。両者は絶対に重ならないようにする。**
+
+| プレフィックス | 書く主体 | 内容 |
+|---|---|---|
+| `data/` | **Lambda のみ** | `status.json` |
+| それ以外（`config/`, `content/`, `_next/`, HTML） | **GitHub Actions のみ** | ビルド成果物、設定、お知らせ |
+
+Actions 側は [手順 1-2](#1-2-デプロイ用-iam-ロールを作成) の `ProtectLambdaManagedData` で
+`data/` への書き込みを Deny してある。`aws s3 sync --delete` が
+`status.json` を消す事故を防ぐため。
+
+そのため **`data/` 配下に Actions が作るファイルを置いてはいけない**。
+お知らせが `content/announcements.json` に置かれているのはこのため。
 
 ### 2-2. Lambda の設定
 

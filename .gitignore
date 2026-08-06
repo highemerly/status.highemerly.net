@@ -63,3 +63,4 @@ lambda/discord-interaction/ziU0D7pA
 
 # バージョン取得ワークフローが一時的に置く k8s リポジトリ
 /.k8s-repo/
+/public/content/
