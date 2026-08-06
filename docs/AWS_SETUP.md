@@ -9,9 +9,9 @@
 |---|---|
 | リージョン | `ap-northeast-1` |
 | S3 バケット | `status-highemerly-net` |
-| CloudFront ディストリビューション ID | <CLOUDFRONT_DISTRIBUTION_ID> |
-| AWS アカウント ID | <ACCOUNT_ID> |
-| GitHub リポジトリ | highemerly/status.highemerly.net |
+| CloudFront ディストリビューション ID | `<CLOUDFRONT_DISTRIBUTION_ID>` |
+| AWS アカウント ID | `<ACCOUNT_ID>` |
+| GitHub リポジトリ | `highemerly/status.highemerly.net` |
 
 ---
 
@@ -37,7 +37,7 @@ IAM → ID プロバイダ → **プロバイダを追加**
 
 IAM → ロール → **ロールを作成** → カスタム信頼ポリシー
 
-**信頼ポリシー**（`<ACCOUNT_ID>` と `<OWNER>/<REPO>` を置換）:
+**信頼ポリシー**（このまま貼り付けられる）:
 
 ```json
 {
@@ -52,7 +52,7 @@ IAM → ロール → **ロールを作成** → カスタム信頼ポリシー
       "Condition": {
         "StringEquals": {
           "token.actions.githubusercontent.com:aud": "sts.amazonaws.com",
-          "token.actions.githubusercontent.com:sub": "repo:<OWNER>/<REPO>:ref:refs/heads/main"
+          "token.actions.githubusercontent.com:sub": "repo:highemerly/status.highemerly.net:ref:refs/heads/main"
         }
       }
     }
@@ -260,7 +260,7 @@ k8s リポジトリのワークフローから `repository_dispatch` を送る�
     curl -X POST \
       -H "Authorization: Bearer ${{ secrets.STATUS_PAGE_TOKEN }}" \
       -H "Accept: application/vnd.github+json" \
-      https://api.github.com/repos/<OWNER>/<STATUS_REPO>/dispatches \
+      https://api.github.com/repos/highemerly/status.highemerly.net/dispatches \
       -d '{"event_type":"k8s-updated"}'
 ```
 
