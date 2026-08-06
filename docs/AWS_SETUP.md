@@ -129,9 +129,29 @@ IAM → ロール → **ロールを作成** → カスタム信頼ポリシー
 失敗する場合は次を確認する:
 
 - `Not authorized to perform sts:AssumeRoleWithWebIdentity` → 信頼ポリシーの
-  `sub` がリポジトリ名・ブランチ名と一致しているか
+  `sub` がリポジトリ名・ブランチ名と一致しているか。
+  トークンが持つ値は次の 1 つだけで、`push` / `workflow_dispatch` /
+  `repository_dispatch` のいずれでも同じになる:
+
+  ```
+  repo:highemerly/status.highemerly.net:ref:refs/heads/main
+  ```
+
+  > **リポジトリをリネームしても AWS 側は追従しない。**
+  > 名前を変えたら、IAM ロールの信頼ポリシーも必ず書き換えること。
+  > IAM → ロール → 信頼関係 → 信頼ポリシーを編集。
+
+- `No OpenIDConnect provider found` → 手順 1-1 の ID プロバイダが未登録
 - `Credentials could not be loaded` → ワークフローの
   `permissions: id-token: write` があるか
+
+### デプロイが起動しないとき
+
+[`deploy.yml`](../.github/workflows/deploy.yml) は `paths-ignore` で
+`docs/**` と `**.md` を除外している。**ドキュメントだけを変更した push では
+デプロイは走らない**（無駄なデプロイを避けるための意図的な設定）。
+
+反映したいときは Actions タブから **Deploy** を手動実行する。
 
 ---
 
