@@ -5,6 +5,15 @@
 
 前提となる既存リソース（S3 バケット・CloudFront・Route53）はそのまま流用する。
 
+> **`<ACCOUNT_ID>` と `<CLOUDFRONT_DISTRIBUTION_ID>` は伏せてある。**
+> このリポジトリは公開されているため、実値は書かない。
+> 貼り付ける前に自分の値へ置換すること。
+>
+> | 伏せ字 | 確認先 |
+> |---|---|
+> | `<ACCOUNT_ID>` | AWS コンソール右上のアカウントメニュー、または `aws sts get-caller-identity` |
+> | `<CLOUDFRONT_DISTRIBUTION_ID>` | CloudFront → ディストリビューション一覧 |
+
 | 項目 | 値 |
 |---|---|
 | リージョン | `ap-northeast-1` |
@@ -39,7 +48,7 @@ IAM → ID プロバイダ → **プロバイダを追加**
 
 IAM → ロール → **ロールを作成** → カスタム信頼ポリシー
 
-**信頼ポリシー**（このまま貼り付けられる）:
+**信頼ポリシー**（`<ACCOUNT_ID>` を置換して使う）:
 
 ```json
 {
@@ -238,7 +247,7 @@ IAM → ロール → **ロールを作成** → 信頼されたエンティテ�
 | `s3:PutObject` に `config/*` を含める | Lambda が `services.json` を上書きできてしまう。設定は Actions の領域で、Lambda は読むだけ |
 | `s3:GetObject` に `data/*` を含める | この Lambda は `status.json` を読まない（前回値を見ずに毎回作り直す） |
 | `ssm:GetParameter` を `/status-page/*` にする | Discord 用の公開鍵や GitHub PAT まで読めてしまう。`prometheus/*` に限定する |
-| ARN のアカウント ID を `*` にする | 別アカウントの同名パスまで対象に入る。`<ACCOUNT_ID>` を明記する |
+| ARN のアカウント ID を `*` にする | 別アカウントの同名パスまで対象に入る。自分のアカウント ID を明記する |
 
 ---
 
