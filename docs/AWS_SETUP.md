@@ -12,6 +12,8 @@
 | CloudFront ディストリビューション ID | `<CLOUDFRONT_DISTRIBUTION_ID>` |
 | AWS アカウント ID | `<ACCOUNT_ID>` |
 | GitHub リポジトリ | `highemerly/status.highemerly.net` |
+| 新 Lambda 関数 | `StatusPageUpdateStatus` |
+| 新 Lambda の ARN | `arn:aws:lambda:ap-northeast-1:<ACCOUNT_ID>:function:StatusPageUpdateStatus` |
 
 ---
 
@@ -262,7 +264,7 @@ Lambda → **関数の作成** → 一から作成
 
 | 項目 | 値 |
 |---|---|
-| 関数名 | `status-page-update-status` |
+| 関数名 | `StatusPageUpdateStatus` |
 | ランタイム | **Node.js 24.x**（`nodejs24.x`） |
 | アーキテクチャ | `arm64`（x86_64 より安いが、無料枠内なのでどちらでもよい） |
 | 実行ロール | 既存のロールを使用 → `status-page-update-status-role` |
@@ -371,7 +373,7 @@ Amazon EventBridge → ルール → **ルールを作成**
 | 名前 | `status-page-update-5min` |
 | ルールタイプ | スケジュール |
 | スケジュールパターン | `rate(5 minutes)` |
-| ターゲット | Lambda 関数 **`status-page-update-status`** |
+| ターゲット | Lambda 関数 **`StatusPageUpdateStatus`** |
 
 > EventBridge の**ルール**によるスケジュール実行は課金されない。
 > （EventBridge **Scheduler** は 100 万回あたり $1 だが、月 8,640 回なので誤差）
