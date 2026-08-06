@@ -1,0 +1,14 @@
+{
+  "name": "update-status-function",
+  "version": "1.0.0",
+  "description": "Lambda function to update status.json from Prometheus",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "dependencies": {
+    "@aws-sdk/client-s3": "^3.504.0",
+    "@aws-sdk/client-ssm": "^3.504.0",
+    "axios": "^1.6.2"
+  }
+}

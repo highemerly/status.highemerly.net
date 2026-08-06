@@ -1,0 +1,12 @@
+aws_region = "ap-northeast-1"
+domain_name = "status.highemerly.net"
+zone_id = "Z1234567890ABC"  # Route53ゾーンID
+acm_certificate_arn = "arn:aws:acm:us-east-1:123456789012:certificate/..."  # ACM証明書ARN（us-east-1）
+
+# Prometheus設定
+prometheus_url = "https://prometheus.handon.club/"
+prometheus_username = "your-username"
+prometheus_password = "your-password"
+
+# Discord設定
+discord_public_key = "your-discord-public-key"

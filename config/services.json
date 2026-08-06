@@ -1,0 +1,114 @@
+{
+  "categories": [
+    {
+      "id": "handon-club",
+      "name": "はんドンクラブ",
+      "description": "汎用Mastodonサーバーのhandon.club。",
+      "url": "https://handon.club/"
+    },
+    {
+      "id": "hiyoko-club",
+      "name": "ひよこスキー",
+      "description": "子育て関連のMisskeyサーバーのhiyoko.club。",
+      "url": "https://mi.hiyoko.club/"
+    },
+    {
+      "id": "hosteka",
+      "name": "Hosteka",
+      "description": "Fediverseアカウントでログインしてオフ会参加者を募るサービス。",
+      "url": "https://hosteka.piyo.me/"
+    },
+    {
+      "id": "shamezo",
+      "name": "SHAMEZO",
+      "description": "画像にテキストを合成する写真共有SNS。",
+      "url": "https://pic.handon.club/"
+    },
+    {
+      "id": "anypost",
+      "name": "anypost",
+      "description": "一つのリンクから、Fediverse・既存SNSなど任意の投稿先に投稿できるサービス。",
+      "url": "https://anypost.dev/"
+    },
+    {
+      "id": "dominion",
+      "name": "ふつうのドミニオンセレクタ",
+      "description": "ボードゲーム「ドミニオン」を遊ぶ際に必要なランダマイザーの選出を行うサービス。",
+      "url": "https://dominion.highemerly.net/"
+    }
+  ],
+  "services": [
+    {
+      "id": "handon-web",
+      "name": "Web",
+      "prometheusQuery": "probe_http_status_code{endpoint='web', env='production', service='handon'}",
+      "categoryId": "handon-club"
+    },
+    {
+      "id": "handon-streaming",
+      "name": "Streaming",
+      "prometheusQuery": "probe_http_status_code{endpoint='streaming', env='production', service='handon'}",
+      "categoryId": "handon-club"
+    },
+    {
+      "id": "handon-media",
+      "name": "Media",
+      "prometheusQuery": "probe_http_status_code{endpoint='media', env='production', service='handon'}",
+      "categoryId": "handon-club"
+    },
+    {
+      "id": "handon-search",
+      "name": "Search",
+      "prometheusQuery": "probe_http_status_code{endpoint='search', env='production', service='handon'}",
+      "categoryId": "handon-club"
+    },
+    {
+      "id": "hiyoko-web",
+      "name": "Web",
+      "prometheusQuery": "probe_http_status_code{endpoint='media', env='production', service='hiyoko'}",
+      "categoryId": "hiyoko-club"
+    },
+    {
+      "id": "hiyoko-media",
+      "name": "Media",
+      "prometheusQuery": "probe_http_status_code{endpoint='media', env='production', service='hiyoko'}",
+      "categoryId": "hiyoko-club"
+    },
+    {
+      "id": "hosteka-web",
+      "name": "Hosteka",
+      "prometheusQuery": "probe_http_status_code{endpoint='web', env='production', service='hosteka'}",
+      "categoryId": "hosteka"
+    },
+    {
+      "id": "anypost-web",
+      "name": "Front",
+      "prometheusQuery": "probe_http_status_code{endpoint='web', env='production', service='anypost'}",
+      "categoryId": "anypost"
+    },
+    {
+      "id": "anypost-api",
+      "name": "Fediverse API",
+      "prometheusQuery": "probe_http_status_code{endpoint='api', env='production', service='anypost'}",
+      "categoryId": "anypost"
+    },
+    {
+      "id": "dominion-static",
+      "name": "Front",
+      "prometheusQuery": "probe_http_status_code{endpoint='static', env='production', service='dominion'}",
+      "categoryId": "dominion"
+    },
+    {
+      "id": "dominion-api",
+      "name": "Dominion API",
+      "prometheusQuery": "probe_http_status_code{endpoint='api', env='production', service='dominion'}",
+      "categoryId": "dominion"
+    },
+    {
+      "id": "movapic-neo-web",
+      "name": "SHAMEZO",
+      "prometheusQuery": "probe_http_status_code{endpoint='web', env='production', service='movapic-neo'}",
+      "categoryId": "shamezo"
+    }
+  ]
+}
