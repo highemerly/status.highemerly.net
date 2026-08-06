@@ -47,6 +47,9 @@ npm run dev                # http://localhost:3000
 npm run build              # 静的エクスポート（out/ に出力）
 node scripts/verify-schema.js   # スキーマとマージロジックの検証
 
+# Lambda が出力した status.json の検証（切り替え判断に使う）
+node scripts/verify-status-json.js https://status.highemerly.net/data/status-v2.json
+
 # 稼働バージョンの取得（k8s リポジトリを読む）
 K8S_REPO=../k8sg1 GITHUB_TOKEN=$(gh auth token) node scripts/build-versions.js
 ```

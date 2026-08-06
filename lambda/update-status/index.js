@@ -19,6 +19,13 @@ const s3Client = new S3Client({ region: REGION });
 const ssmClient = new SSMClient({ region: REGION });
 
 const S3_BUCKET = process.env.S3_BUCKET;
+
+// 出力先。新旧の Lambda を並行稼働させる間は data/status-v2.json に逃がし、
+// 本番切り替え時に data/status.json へ変える。
+// 旧フロントエンドは旧スキーマしか読めないので、いきなり本番のキーを
+// 上書きするとサイトが壊れる。
+const STATUS_KEY = process.env.STATUS_KEY || 'data/status.json';
+
 const HISTORY_HOURS = parseInt(process.env.HISTORY_HOURS || '48', 10);
 const STEP_SECONDS = 300; // 5 分。フロントの表示単位と一致させる
 const QUERY_TIMEOUT_MS = parseInt(process.env.QUERY_TIMEOUT_MS || '10000', 10);
@@ -71,12 +78,24 @@ exports.handler = async () => {
   await putStatusToS3(payload);
 
   const body = JSON.stringify(payload);
+  const counts = {};
+  for (const entry of Object.values(services)) {
+    counts[entry.status] = (counts[entry.status] || 0) + 1;
+  }
+
   console.log(
-    `Updated ${Object.keys(services).length} services in ${Date.now() - startedAt}ms, ` +
-    `${(body.length / 1024).toFixed(1)}KB`
+    `Wrote ${STATUS_KEY}: ${Object.keys(services).length} services, ` +
+    `${(body.length / 1024).toFixed(1)}KB, ${Date.now() - startedAt}ms, ` +
+    JSON.stringify(counts)
   );
 
-  return { ok: true, services: Object.keys(services).length, bytes: body.length };
+  return {
+    ok: true,
+    key: STATUS_KEY,
+    services: Object.keys(services).length,
+    bytes: body.length,
+    counts,
+  };
 };
 
 /* ------------------------------------------------------------------ *
@@ -252,7 +271,7 @@ function statusFromValue(value) {
 async function putStatusToS3(payload) {
   await s3Client.send(new PutObjectCommand({
     Bucket: S3_BUCKET,
-    Key: 'data/status.json',
+    Key: STATUS_KEY,
     // 整形出力しない。インデントだけで 3 割増える
     Body: JSON.stringify(payload),
     ContentType: 'application/json',

@@ -124,20 +124,47 @@ IAM → ロール → **ロールを作成** → カスタム信頼ポリシー
 
 ---
 
-## 2. status.json を 5 分ごとに生成する（EventBridge）
+## 2. status.json を 5 分ごとに生成する（新 Lambda を新規作成）
 
-現行の「アクセス契機で生成」をやめ、スケジュール実行に変える。
+**既存の `UpdateStatusFunction` には一切手を触れない。** 新しい関数を隣に作り、
+出力先を分けたまま並行稼働させ、正しいと確認できてから切り替える。
 
-### 2-1. Lambda の実行ロールに必要な権限
+旧 Lambda は「アクセス契機で `data/status.json` を更新する」構成のまま生かしておく。
+本番のステータスページは切り替えの瞬間まで従来どおり動き続ける。
 
-既存の `UpdateStatusFunction` の実行ロールに以下があることを確認する。
+### 全体の流れ
 
-この Lambda が実際に触るのは次の 3 つだけ。それ以上は与えない。
+```
+[2-1〜2-3] 新ロール・新 Lambda を作る（出力先は data/status-v2.json）
+     ↓
+[2-4] 手動実行して検証   ← ここまで本番に影響なし。失敗しても何も壊れない
+     ↓
+[2-5] EventBridge で 5 分ごとに回し、しばらく様子を見る
+     ↓
+[2-6] 出力先を data/status.json に変更 ＋ 新フロントエンドをデプロイ  ← 切り替え
+     ↓
+[2-7] 旧 Lambda と API Gateway を止める（削除は数日置いてから）
+```
+
+> **切り替え前に新 Lambda が `data/status.json` を書いてはいけない。**
+> 本番のフロントエンドはまだ旧スキーマしか読めないので、上書きするとサイトが壊れる。
+> そのため環境変数 `STATUS_KEY` で出力先を逃がす。
+
+---
+
+### 2-1. 実行ロールを新規作成
+
+IAM → ロール → **ロールを作成** → 信頼されたエンティティ: **AWS のサービス** → **Lambda**
+
+ロール名の例: `status-page-update-status-role`
+
+アクセス許可ポリシーは以下をインラインで追加する。
+この Lambda が触るのは次の 3 つだけで、それ以上は与えない。
 
 | 対象 | 操作 |
 |---|---|
 | `config/services.json` | 読む |
-| `data/status.json` | 書く |
+| `data/status.json` と `data/status-v2.json` | 書く |
 | `/status-page/prometheus/*` | 読む（`WithDecryption: true`） |
 
 ```json
@@ -154,7 +181,10 @@ IAM → ロール → **ロールを作成** → カスタム信頼ポリシー
       "Sid": "WriteStatus",
       "Effect": "Allow",
       "Action": "s3:PutObject",
-      "Resource": "arn:aws:s3:::status-highemerly-net/data/status.json"
+      "Resource": [
+        "arn:aws:s3:::status-highemerly-net/data/status.json",
+        "arn:aws:s3:::status-highemerly-net/data/status-v2.json"
+      ]
     },
     {
       "Sid": "ReadPrometheusCredentials",
@@ -175,7 +205,16 @@ IAM → ロール → **ロールを作成** → カスタム信頼ポリシー
 }
 ```
 
-CloudWatch Logs への書き込みは `AWSLambdaBasicExecutionRole` で足りる。
+> 検証用の `data/status-v2.json` も許可対象に入れてある。
+> 手順 2-7 が終わったらこの行は消してよい。
+
+さらに、マネージドポリシー **`AWSLambdaBasicExecutionRole`** をアタッチする
+（CloudWatch Logs への書き込み用）。
+
+`kms:Decrypt` は SSM の `SecureString` を復号するために要る。
+`ssm:GetParameter` だけでは `AccessDeniedException` になる。
+パラメータが `String`（平文）なら不要だが、その場合はパスワードが平文で
+保存されているということなので `SecureString` に作り直すこと。
 
 ### やりがちな広げすぎ
 
@@ -204,16 +243,89 @@ Actions 側は [手順 1-2](#1-2-デプロイ用-iam-ロールを作成) の `Pr
 そのため **`data/` 配下に Actions が作るファイルを置いてはいけない**。
 お知らせが `content/announcements.json` に置かれているのはこのため。
 
-### 2-2. Lambda の設定
+### 2-2. Lambda 関数を新規作成
 
-| 項目 | 値 | 備考 |
+Lambda → **関数の作成** → 一から作成
+
+| 項目 | 値 |
+|---|---|
+| 関数名 | `status-page-update-status` |
+| ランタイム | **Node.js 22.x** |
+| アーキテクチャ | `arm64`（x86_64 より安いが、無料枠内なのでどちらでもよい） |
+| 実行ロール | 既存のロールを使用 → `status-page-update-status-role` |
+
+### 2-3. コードと設定
+
+**この関数は外部ライブラリを一切使わない。** HTTP は Node 標準の `fetch`、
+AWS SDK v3 は Node.js 22 ランタイムに同梱されているものを使う。
+つまり **zip を作らず、コンソールのエディタに貼り付けるだけでよい**。
+
+1. [`lambda/update-status/index.js`](../lambda/update-status/index.js) の中身を全部コピー
+2. Lambda コンソールの「コード」タブで `index.mjs` を **`index.js` にリネーム**
+   （既定は ESM の `index.mjs`。このコードは CommonJS なので拡張子を合わせる）
+3. 貼り付けて **Deploy**
+
+> `index.mjs` のまま貼ると `require is not defined` で落ちる。
+
+**設定 → 一般設定**
+
+| 項目 | 値 | 理由 |
 |---|---|---|
-| メモリ | 512 MB | Prometheus への並列リクエストが主。増やすと速くなるが無料枠を食う |
-| タイムアウト | 60 秒 | 12 サービス × 2 クエリを並列実行。通常は数秒 |
-| 環境変数 `S3_BUCKET` | `status-highemerly-net` | |
-| 環境変数 `HISTORY_HOURS` | `48` | 履歴の保持時間 |
+| メモリ | 512 MB | Prometheus への並列リクエストが主。増やすと速いが無料枠を食う |
+| タイムアウト | 60 秒 | 12 サービスを並列実行。通常は数秒で終わる |
 
-### 2-3. EventBridge スケジュールを作成
+**設定 → 環境変数**
+
+| キー | 値 | 備考 |
+|---|---|---|
+| `S3_BUCKET` | `status-highemerly-net` | |
+| `STATUS_KEY` | `data/status-v2.json` | **検証中はこれ。切り替え時に `data/status.json` へ変更する** |
+| `HISTORY_HOURS` | `48` | 履歴の保持時間 |
+
+### 2-4. 手動実行して検証する
+
+**ここまでは本番に一切影響しない。** 失敗しても壊れるものはない。
+
+Lambda コンソール → **テスト** タブ → イベント JSON は `{}` でよい
+（この関数はイベントの中身を見ない）→ **テスト**
+
+**成功時のログ**（CloudWatch Logs）:
+
+```
+Wrote data/status-v2.json: 12 services, 7.5KB, 3421ms, {"up":12}
+```
+
+次に、出力された JSON を検証する。ローカルから:
+
+```bash
+curl -s https://status.highemerly.net/data/status-v2.json -o /tmp/v2.json
+node scripts/verify-status-json.js /tmp/v2.json
+```
+
+検証内容は、5 分境界に揃っているか・履歴の長さが `points` と一致するか・
+設定のサービスが全部揃っているか・`status` が履歴の末尾と矛盾しないか、など。
+
+```
+サービス 12/12 件
+  handon-web         up           40ms  稼働率 100.00%
+  ...
+検証 OK。切り替えて問題ありません。
+```
+
+**よくある失敗**
+
+| ログ / 症状 | 原因 |
+|---|---|
+| `AccessDeniedException` (ssm) | `kms:Decrypt` が無い。2-1 を確認 |
+| `Prometheus URL not found at ...` | SSM のパラメータ名が違う。`/status-page/prometheus/url` |
+| 全サービスが `unknown` | Prometheus に到達できていない。URL・認証・セキュリティグループ |
+| 一部だけ全期間 `unknown` | そのサービスのクエリのラベルが実際と合っていない |
+| `require is not defined` | ファイル名が `index.mjs` のまま。`index.js` にリネームする |
+| `Task timed out` | Prometheus の応答が遅い。タイムアウトを 60 秒に上げたか確認 |
+
+### 2-5. EventBridge スケジュールを作成
+
+検証が通ってから作る。
 
 Amazon EventBridge → ルール → **ルールを作成**
 
@@ -222,12 +334,56 @@ Amazon EventBridge → ルール → **ルールを作成**
 | 名前 | `status-page-update-5min` |
 | ルールタイプ | スケジュール |
 | スケジュールパターン | `rate(5 minutes)` |
-| ターゲット | Lambda 関数 `UpdateStatusFunction` |
+| ターゲット | Lambda 関数 **`status-page-update-status`** |
 
 > EventBridge の**ルール**によるスケジュール実行は課金されない。
 > （EventBridge **Scheduler** は 100 万回あたり $1 だが、月 8,640 回なので誤差）
 
-### 2-4. コストの確認結果
+しばらく（30 分ほど）回してから、もう一度検証する。
+`最終更新` が 5 分以内になっていれば cron が効いている。
+
+```bash
+curl -s https://status.highemerly.net/data/status-v2.json -o /tmp/v2.json
+node scripts/verify-status-json.js /tmp/v2.json
+```
+
+### 2-6. 本番へ切り替える
+
+**新旧のスキーマは互換性がない。Lambda とフロントエンドを同時に切り替える。**
+
+1. 新フロントエンドをデプロイする（`main` に push → Deploy ワークフロー）
+   - この時点ではまだ `data/status.json` は旧スキーマなので、
+     サイトは「読み込み中」または読み込みエラーになる
+2. **すぐに** Lambda の環境変数 `STATUS_KEY` を `data/status.json` に変更して保存
+3. Lambda を手動で 1 回テスト実行し、`data/status.json` を新スキーマで上書きする
+4. サイトを再読み込みして表示を確認する
+
+CloudFront のキャッシュは `s-maxage=60` なので、最大 60 秒で反映される。
+
+> **順序を逆にしないこと。** 先に Lambda を切り替えると、
+> 旧フロントエンドが新スキーマを読んで壊れた表示になる時間が生まれる。
+> フロントエンドを先に出せば、最悪でも「読み込み中」で止まるだけで済む。
+
+**切り戻し方**
+
+1. Lambda の `STATUS_KEY` を `data/status-v2.json` に戻す
+2. リポジトリを `git revert` して push（旧フロントエンドに戻る）
+3. 旧 Lambda を手動実行して `data/status.json` を旧スキーマに戻す
+
+### 2-7. 旧構成を止める
+
+切り替えが安定してから（数日は置く）。
+
+1. 旧 `UpdateStatusFunction` を呼んでいる **API Gateway のルート `/api/v1/status` を削除**
+   - 新フロントエンドはこのエンドポイントを一切呼ばない
+2. 旧 `UpdateStatusFunction` を削除
+3. 2-1 のポリシーから `data/status-v2.json` の行を削除
+4. S3 の `data/status-v2.json` を削除
+
+> Discord 用の Lambda（`HandleDiscordInteractionFunction` /
+> `DiscordCommandWorkerFunction`）はここでは触らない。手順 5 で扱う。
+
+### 2-8. コストの確認結果
 
 | 項目 | 月間 | コスト |
 |---|---|---|
