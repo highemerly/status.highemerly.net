@@ -14,6 +14,18 @@ export interface Category {
   name: Localized;
   description?: Localized;
   url?: string;
+  /** バージョンの取得元。使うのは scripts/build-versions.js のみ */
+  version?: CategoryVersionSpec;
+}
+
+export interface CategoryVersionSpec {
+  /** k8s リポジトリ内の本番マニフェストへのパス */
+  manifest: string;
+  /** タグを取り出す対象のイメージ名 */
+  image: string;
+  /** タグから表示用バージョンを抜き出す正規表現 */
+  displayPattern?: string;
+  releases?: { repo: string; tagPrefix?: string };
 }
 
 export interface Service {
@@ -74,4 +86,26 @@ export interface Announcement {
 
 export interface AnnouncementsPayload {
   announcements: Announcement[];
+}
+
+/* ------------------------------------------------------------------ *
+ * config/versions.json（scripts/build-versions.js が生成）
+ * ------------------------------------------------------------------ */
+
+export interface VersionEntry {
+  /** 表示用のバージョン */
+  version: string;
+  /** マニフェストに書かれている実際のイメージタグ */
+  imageTag: string;
+  /** リリースを切っていないサービスでは存在しない */
+  release?: {
+    name: string;
+    url: string;
+    publishedAt: string;
+  };
+}
+
+export interface VersionsPayload {
+  updatedAt: string;
+  categories: Record<string, VersionEntry>;
 }

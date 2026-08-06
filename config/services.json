@@ -2,21 +2,43 @@
   "categories": [
     {
       "id": "handon-club",
-      "name": { "ja": "はんドンクラブ", "en": "Handon Club" },
+      "name": {
+        "ja": "はんドンクラブ",
+        "en": "Handon Club"
+      },
       "description": {
         "ja": "誰でも参加できる汎用の Mastodon サーバーです。",
         "en": "A general-purpose Mastodon server open to everyone."
       },
-      "url": "https://handon.club/"
+      "url": "https://handon.club/",
+      "version": {
+        "manifest": "manifests/handon/prd/web.yaml",
+        "image": "ghcr.io/highemerly/mastodon",
+        "displayPattern": "^(\\d+\\.\\d+\\.\\d+)",
+        "releases": {
+          "repo": "mastodon/mastodon",
+          "tagPrefix": "v"
+        }
+      }
     },
     {
       "id": "hiyoko-club",
-      "name": { "ja": "ひよこスキー", "en": "Hiyoko Ski" },
+      "name": {
+        "ja": "ひよこスキー",
+        "en": "Hiyoko Ski"
+      },
       "description": {
         "ja": "子育てに関する話題を中心とした Misskey サーバーです。",
         "en": "A Misskey server centred on parenting and childcare."
       },
-      "url": "https://mi.hiyoko.club/"
+      "url": "https://mi.hiyoko.club/",
+      "version": {
+        "manifest": "manifests/hiyoko/prd/web.yaml",
+        "image": "misskey/misskey",
+        "releases": {
+          "repo": "misskey-dev/misskey"
+        }
+      }
     },
     {
       "id": "hosteka",
@@ -25,7 +47,11 @@
         "ja": "Fediverse のアカウントでログインし、オフ会の参加者を募集できるサービスです。",
         "en": "Organise meetups and gather attendees by signing in with a Fediverse account."
       },
-      "url": "https://hosteka.piyo.me/"
+      "url": "https://hosteka.piyo.me/",
+      "version": {
+        "manifest": "manifests/hosteka/prd/web.yaml",
+        "image": "ghcr.io/highemerly/hosteka"
+      }
     },
     {
       "id": "shamezo",
@@ -34,7 +60,14 @@
         "ja": "画像にテキストを合成して共有できる写真 SNS です。",
         "en": "A photo-sharing service for compositing text onto images."
       },
-      "url": "https://pic.handon.club/"
+      "url": "https://pic.handon.club/",
+      "version": {
+        "manifest": "manifests/movapic-neo/prd/web.yaml",
+        "image": "ghcr.io/highemerly/movapic-neo",
+        "releases": {
+          "repo": "highemerly/movapic-neo"
+        }
+      }
     },
     {
       "id": "anypost",
@@ -43,16 +76,27 @@
         "ja": "ひとつのリンクから、Fediverse や既存 SNS など好きな投稿先に投稿できるサービスです。",
         "en": "Post to the Fediverse and other social networks from a single link."
       },
-      "url": "https://anypost.dev/"
+      "url": "https://anypost.dev/",
+      "version": {
+        "manifest": "manifests/anypost/prd/web.yaml",
+        "image": "ghcr.io/highemerly/anypost-web"
+      }
     },
     {
       "id": "dominion",
-      "name": { "ja": "ふつうのドミニオンセレクタ", "en": "Dominion Selector" },
+      "name": {
+        "ja": "ふつうのドミニオンセレクタ",
+        "en": "Dominion Selector"
+      },
       "description": {
         "ja": "ボードゲーム「ドミニオン」で使うサプライを、ランダムに選出するサービスです。",
         "en": "Randomly picks the kingdom card supply for the board game Dominion."
       },
-      "url": "https://dominion.highemerly.net/"
+      "url": "https://dominion.highemerly.net/",
+      "version": {
+        "manifest": "manifests/dominion/prd/web.yaml",
+        "image": "ghcr.io/highemerly/dominion"
+      }
     }
   ],
   "services": [
@@ -103,7 +147,7 @@
         "ja": "投稿の閲覧と作成を行う Web インターフェース",
         "en": "Web interface for reading and writing posts"
       },
-      "prometheusQuery": "probe_http_status_code{endpoint='media', env='production', service='hiyoko'}",
+      "prometheusQuery": "probe_http_status_code{endpoint='web', env='production', service='hiyoko'}",
       "categoryId": "hiyoko-club"
     },
     {

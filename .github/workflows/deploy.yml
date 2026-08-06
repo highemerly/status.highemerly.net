@@ -42,11 +42,14 @@ jobs:
       - name: Build
         run: npm run build
 
-      # Lambda と共有する設定ファイル。Lambda は S3 の config/services.json を読む
+      # Lambda と共有する設定ファイル。Lambda は S3 の config/services.json を読む。
+      # versions.json は update-versions ワークフローがコミットするので、無いこともある。
       - name: Copy config
         run: |
           mkdir -p out/config
           cp config/services.json out/config/services.json
+          cp config/versions.json out/config/versions.json 2>/dev/null || \
+            echo "config/versions.json はまだありません"
 
       - name: Configure AWS credentials (OIDC)
         uses: aws-actions/configure-aws-credentials@v4

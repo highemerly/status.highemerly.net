@@ -37,6 +37,8 @@ const dict = {
     } as Record<ServiceStatus, string>,
     bucketTooltip: '{start} 〜 {end}',
     autoReload: '5分ごとに自動更新されます',
+    version: 'バージョン',
+    releaseNotes: 'リリースノート',
   },
   en: {
     siteTitle: 'Service Status',
@@ -70,6 +72,8 @@ const dict = {
     } as Record<ServiceStatus, string>,
     bucketTooltip: '{start} – {end}',
     autoReload: 'Refreshes every 5 minutes',
+    version: 'Version',
+    releaseNotes: 'Release notes',
   },
 } as const;
 

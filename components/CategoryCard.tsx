@@ -4,12 +4,27 @@ import { ServiceRow } from './ServiceRow';
 import { StatusIcon } from './StatusIcon';
 import { localized, overallStatus, type RangeHours } from '@/lib/status';
 import type { Dict } from '@/lib/i18n';
-import type { Category, Lang, Service, StatusPayload } from '@/lib/types';
+import type {
+  Category,
+  Lang,
+  Service,
+  StatusPayload,
+  VersionEntry,
+} from '@/lib/types';
+
+function ExternalIcon() {
+  return (
+    <svg viewBox="0 0 16 16" width="11" height="11" fill="currentColor" aria-hidden="true">
+      <path d="M6 2h8v8h-2V5.4L5.4 12 4 10.6 10.6 4H6z" />
+    </svg>
+  );
+}
 
 export function CategoryCard({
   category,
   services,
   payload,
+  version,
   hours,
   lang,
   dict,
@@ -17,6 +32,7 @@ export function CategoryCard({
   category: Category;
   services: Service[];
   payload: StatusPayload;
+  version?: VersionEntry;
   hours: RangeHours;
   lang: Lang;
   dict: Dict;
@@ -47,24 +63,44 @@ export function CategoryCard({
           </span>
         </div>
 
-        {/*
-          カード全体をリンクにしない。
-          稼働状況を確認しに来ただけの人が、誤ってサービス本体に飛ばされるのを防ぐ。
-          遷移はこの明示的なリンクからのみ行う。
-        */}
-        {category.url && (
-          <a
-            href={category.url}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="mt-2.5 ml-6 inline-flex items-center gap-1 rounded text-xs text-accent hover:underline"
-          >
-            {dict.openSite}
-            <svg viewBox="0 0 16 16" width="11" height="11" fill="currentColor" aria-hidden="true">
-              <path d="M6 2h8v8h-2V5.4L5.4 12 4 10.6 10.6 4H6z" />
-            </svg>
-          </a>
-        )}
+        <div className="mt-2.5 ml-6 flex flex-wrap items-center gap-x-4 gap-y-1.5">
+          {/*
+            カード全体をリンクにしない。
+            稼働状況を確認しに来ただけの人が、誤ってサービス本体に飛ばされるのを防ぐ。
+            遷移はこの明示的なリンクからのみ行う。
+          */}
+          {category.url && (
+            <a
+              href={category.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1 rounded text-xs text-accent hover:underline"
+            >
+              {dict.openSite}
+              <ExternalIcon />
+            </a>
+          )}
+
+          {version && (
+            <span className="inline-flex items-center gap-2 text-xs text-fg-subtle">
+              <span title={`${dict.version}: ${version.imageTag}`} className="tabular-nums">
+                {version.version}
+              </span>
+              {/* リリースを切っていないサービスではリンクを出さない */}
+              {version.release && (
+                <a
+                  href={version.release.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1 rounded text-accent hover:underline"
+                >
+                  {dict.releaseNotes}
+                  <ExternalIcon />
+                </a>
+              )}
+            </span>
+          )}
+        </div>
       </header>
 
       <div className="divide-y divide-line px-4 sm:px-5">

@@ -14,6 +14,7 @@ import type {
   AnnouncementsPayload,
   ServicesConfig,
   StatusPayload,
+  VersionsPayload,
 } from '@/lib/types';
 
 const RELOAD_INTERVAL_MS = 5 * 60 * 1000;
@@ -26,6 +27,7 @@ export default function HomePage() {
   const [config, setConfig] = useState<ServicesConfig | null>(null);
   const [status, setStatus] = useState<StatusPayload | null>(null);
   const [announcements, setAnnouncements] = useState<Announcement[]>([]);
+  const [versions, setVersions] = useState<VersionsPayload['categories']>({});
   const [failed, setFailed] = useState(false);
 
   const load = useCallback(async () => {
@@ -45,6 +47,7 @@ export default function HomePage() {
       return;
     }
 
+    // お知らせとバージョンは補足情報。取れなくても稼働状況は表示する
     try {
       const res = await fetch('/data/announcements.json');
       if (res.ok) {
@@ -52,7 +55,17 @@ export default function HomePage() {
         setAnnouncements(payload.announcements ?? []);
       }
     } catch {
-      // お知らせが取れなくても稼働状況は表示する
+      /* 無視 */
+    }
+
+    try {
+      const res = await fetch('/config/versions.json');
+      if (res.ok) {
+        const payload: VersionsPayload = await res.json();
+        setVersions(payload.categories ?? {});
+      }
+    } catch {
+      /* 無視 */
     }
   }, []);
 
@@ -133,6 +146,7 @@ export default function HomePage() {
                       (s) => s.categoryId === category.id
                     )}
                     payload={status}
+                    version={versions[category.id]}
                     hours={range}
                     lang={lang}
                     dict={dict}

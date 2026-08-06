@@ -287,19 +287,58 @@ worker が担っていた処理はすべて Actions 側に移る。
 
 ---
 
-## 6. バージョン / リリースノート表示
+## 6. バージョン / リリースノート表示 【実装済み】
 
-k8s リポジトリからイメージタグを取得する方針は妥当。
+### k8s リポジトリの調査結果
 
-- **取得方法**: GitHub Actions が k8s リポジトリを checkout し、マニフェストの
-  `image: ghcr.io/xxx:v4.3.1` からタグを抽出して `versions.json` を生成
-- **起動契機**: k8s リポジトリ側から `repository_dispatch` を送るのが理想。
-  難しければ日次 cron でも実用上は十分
-- **リリースノート**: 抽出したタグで各アプリの GitHub Releases API を引き、
-  タイトルと URL を保存。本文全文を持つと重くなるので、リンクに留めるのを推奨
+`highemerly/k8sg1-repo`（**private**）。素の manifest + Kustomize で、
+`manifests/<サービス>/<prd|dev>/*.yaml` に本番と開発が分かれている。
 
-k8s リポジトリの構成（Kustomize / Helm / 素の manifest）によって抽出方法が変わるため、
-着手前に確認が必要。
+イメージは `image: ghcr.io/highemerly/mastodon:4.6.4-20260730131238` の形式で直接書かれており、
+Kustomize の `images:` による差し替えは使っていない。**タグは manifest を読むだけで取れる。**
+
+`redis:8.2-alpine` や `busybox:1.36` のような基盤コンテナも同じファイルに含まれるため、
+全 `image:` 行を拾うのではなく、**カテゴリごとに対象を明示的に宣言する**方式にした
+（`config/services.json` の `categories[].version`）。
+
+### リリースノートの取得可否
+
+**取得できるのは Mastodon と Misskey だけだった。**
+
+| カテゴリ | イメージタグ | リリースノート |
+|---|---|---|
+| はんドンクラブ | `mastodon:4.6.4-20260730131238` | ✅ `mastodon/mastodon` の `v4.6.4` |
+| ひよこスキー | `misskey/misskey:2026.6.0` | ✅ `misskey-dev/misskey` の `2026.6.0` |
+| SHAMEZO | `movapic-neo:1.4.3` | ❌ リポジトリは公開だが該当タグのリリースなし |
+| Hosteka | `hosteka:1.4.13` | ❌ リポジトリが private・リリース 0 件 |
+| anypost | `anypost-web:2026-05-19` | ❌ `anypost-web` が private |
+| ふつうのドミニオンセレクタ | `dominion:2026052601` | ❌ リポジトリが private・リリース 0 件 |
+
+そのため **バージョンは全カテゴリで表示し、リリースノートはリンクが取れたものだけ出す**
+設計にした。自作サービス側で GitHub Releases を切るようにすれば、設定を変えずに自動で出る。
+
+はんドンクラブは独自ビルドのため、タグに `-20260730131238` というビルド時刻が付く。
+`displayPattern` で `4.6.4` を抜き出し、本家のリリース（`v4.6.4`）に対応付けている。
+実際のイメージタグはツールチップで確認できる。
+
+### 更新の流れ
+
+```
+[k8s リポジトリ] --(任意) repository_dispatch--> [update-versions ワークフロー]
+                                                        │ 日次 cron でも起動
+                                                        ▼
+                                            config/versions.json をコミット
+                                                        │ push
+                                                        ▼
+                                              [deploy ワークフロー] --> S3
+```
+
+S3 に直接書かず**リポジトリにコミットする**ことで、デプロイ経路が 1 本にまとまり、
+どのサービスがいつ上がったかが git 履歴に残る。
+
+> **注意点**: 生成物に毎回現在時刻を入れると、バージョンが変わっていなくても
+> 差分が出て、日次実行のたびに無意味なコミットとデプロイが走る。
+> `scripts/build-versions.js` は内容が同じなら `updatedAt` を据え置く。
 
 ---
 

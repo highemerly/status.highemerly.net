@@ -46,6 +46,9 @@ npm run dev                # http://localhost:3000
 ```bash
 npm run build              # 静的エクスポート（out/ に出力）
 node scripts/verify-schema.js   # スキーマとマージロジックの検証
+
+# 稼働バージョンの取得（k8s リポジトリを読む）
+K8S_REPO=../k8sg1 GITHUB_TOKEN=$(gh auth token) node scripts/build-versions.js
 ```
 
 ---
@@ -120,6 +123,24 @@ Lambda は別途デプロイする:
 `prometheusQuery` に配列を渡すと、複数コンポーネントをまとめて 1 サービスとして扱う。
 全部正常なら `up`、一部だけ停止なら `degraded`、全部停止なら `down`。
 
+カテゴリに `version` を書くと、k8s リポジトリの本番マニフェストから稼働バージョンを取り出す。
+
+```json
+{
+  "id": "handon-club",
+  "version": {
+    "manifest": "manifests/handon/prd/web.yaml",
+    "image": "ghcr.io/highemerly/mastodon",
+    "displayPattern": "^(\\d+\\.\\d+\\.\\d+)",
+    "releases": { "repo": "mastodon/mastodon", "tagPrefix": "v" }
+  }
+}
+```
+
+`releases` を省く、または該当タグのリリースが無い場合は、バージョンだけ表示して
+リリースノートのリンクは出さない。生成物は `config/versions.json`
+（[update-versions ワークフロー](.github/workflows/update-versions.yml)が日次でコミットする）。
+
 ### 機密情報
 
 AWS SSM Parameter Store で管理する。
@@ -154,7 +175,7 @@ AWS SSM Parameter Store で管理する。
 | 2 | status.json 新スキーマ + Lambda cron 化 | コード完了 / AWS 側の設定待ち |
 | 3 | フロントエンド刷新 | 完了 |
 | 4 | お知らせ機能の置き換え（Discord → GitHub Actions） | 未着手 |
-| 5 | バージョン / リリースノート表示 | 未着手 |
+| 5 | バージョン / リリースノート表示 | コード完了 / PAT 登録待ち |
 
 > **以下のドキュメントは旧アーキテクチャのもので、内容が古い。**
 > 手順 4・5 の完了後に整理する。

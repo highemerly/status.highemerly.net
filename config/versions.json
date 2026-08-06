@@ -1,0 +1,39 @@
+{
+  "updatedAt": "2026-08-06T13:38:32.925Z",
+  "categories": {
+    "handon-club": {
+      "version": "4.6.4",
+      "imageTag": "4.6.4-20260730131238",
+      "release": {
+        "name": "v4.6.4",
+        "url": "https://github.com/mastodon/mastodon/releases/tag/v4.6.4",
+        "publishedAt": "2026-07-27T14:03:48Z"
+      }
+    },
+    "hiyoko-club": {
+      "version": "2026.6.0",
+      "imageTag": "2026.6.0",
+      "release": {
+        "name": "2026.6.0",
+        "url": "https://github.com/misskey-dev/misskey/releases/tag/2026.6.0",
+        "publishedAt": "2026-06-22T11:47:24Z"
+      }
+    },
+    "hosteka": {
+      "version": "1.4.13",
+      "imageTag": "1.4.13"
+    },
+    "shamezo": {
+      "version": "1.4.3",
+      "imageTag": "1.4.3"
+    },
+    "anypost": {
+      "version": "2026-05-19",
+      "imageTag": "2026-05-19"
+    },
+    "dominion": {
+      "version": "2026052601",
+      "imageTag": "2026052601"
+    }
+  }
+}

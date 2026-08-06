@@ -110,3 +110,11 @@ function write(relative, data) {
 write('public/data/status.json', status);
 write('public/data/announcements.json', announcements);
 write('public/config/services.json', config);
+
+// バージョンは scripts/build-versions.js が作る。まだ無ければ飛ばす
+const versionsPath = path.join(ROOT, 'config/versions.json');
+if (fs.existsSync(versionsPath)) {
+  write('public/config/versions.json', JSON.parse(fs.readFileSync(versionsPath, 'utf-8')));
+} else {
+  console.log('config/versions.json は未生成のため省略');
+}

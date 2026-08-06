@@ -1,0 +1,67 @@
+name: Update versions
+
+# k8s リポジトリの本番マニフェストから稼働バージョンを取り出し、
+# config/versions.json を更新する。
+#
+# 変更があればコミットするだけで、S3 への反映は Deploy ワークフローに任せる。
+# 経路が 1 本にまとまり、いつどのバージョンに上がったかが git 履歴に残る。
+on:
+  schedule:
+    - cron: '17 21 * * *' # 毎日 06:17 JST
+  repository_dispatch:
+    types: [k8s-updated] # k8s リポジトリ側から叩く用
+  workflow_dispatch:
+
+concurrency:
+  group: update-versions
+  cancel-in-progress: false
+
+permissions:
+  contents: write # config/versions.json をコミットするため
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # k8s リポジトリは private なので、既定の GITHUB_TOKEN では読めない。
+      # Contents: Read only の fine-grained PAT が必要（docs/AWS_SETUP.md 参照）。
+      - name: Checkout k8s repository
+        uses: actions/checkout@v4
+        with:
+          repository: highemerly/k8sg1-repo
+          token: ${{ secrets.K8S_REPO_TOKEN }}
+          path: .k8s-repo
+          persist-credentials: false
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Build versions.json
+        env:
+          K8S_REPO: ${{ github.workspace }}/.k8s-repo
+          # 公開リポジトリの Releases 参照に使う。レート制限の緩和が目的
+          GITHUB_TOKEN: ${{ github.token }}
+        run: node scripts/build-versions.js
+
+      - name: Commit if changed
+        run: |
+          if git diff --quiet -- config/versions.json; then
+            echo "バージョンに変更なし"
+            exit 0
+          fi
+
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add config/versions.json
+          git commit -m "chore: サービスのバージョンを更新"
+          git push
+
+          {
+            echo "### バージョンを更新しました"
+            echo '```json'
+            cat config/versions.json
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"

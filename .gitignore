@@ -60,3 +60,6 @@ lambda/discord-interaction/ziU0D7pA
 # ローカル開発用の生成物（scripts/dev-data.js が作る）
 /public/data/
 /public/config/
+
+# バージョン取得ワークフローが一時的に置く k8s リポジトリ
+/.k8s-repo/

@@ -9,9 +9,9 @@
 |---|---|
 | リージョン | `ap-northeast-1` |
 | S3 バケット | `status-highemerly-net` |
-| CloudFront ディストリビューション ID | （記入してください） |
-| AWS アカウント ID | （記入してください） |
-| GitHub リポジトリ | （記入してください。例: `highemerly/status.highemerly.net`） |
+| CloudFront ディストリビューション ID | <CLOUDFRONT_DISTRIBUTION_ID> |
+| AWS アカウント ID | <ACCOUNT_ID> |
+| GitHub リポジトリ | highemerly/status.highemerly.net |
 
 ---
 
@@ -223,9 +223,55 @@ CloudFront のキャッシュポリシーは、オリジンの `Cache-Control` �
 
 ---
 
-## 4. Discord Bot → GitHub Actions（案C）
+## 4. バージョン取得用の GitHub PAT
 
-> 手順 4 は「お知らせ機能の置き換え」の段階で実施する。ここは予定。
+> AWS ではなく GitHub 側の設定。手順 5（バージョン表示）で必要。
+
+[`update-versions.yml`](../.github/workflows/update-versions.yml) は k8s リポジトリ
+（`highemerly/k8sg1-repo`）の本番マニフェストを読む。**このリポジトリは private** のため、
+ワークフロー既定の `GITHUB_TOKEN` では checkout できない。
+
+### 手順
+
+1. GitHub → Settings → Developer settings → **Fine-grained personal access tokens** → Generate new token
+2. 次の内容で発行する
+
+   | 項目 | 値 |
+   |---|---|
+   | Repository access | Only select repositories → `highemerly/k8sg1-repo` |
+   | Repository permissions | **Contents: Read-only** のみ |
+   | Expiration | 1 年など（期限切れでワークフローが失敗するので、更新を忘れないこと） |
+
+3. ステータスページのリポジトリ → Settings → Secrets and variables → Actions →
+   **Secrets** タブに `K8S_REPO_TOKEN` として登録する
+
+> 権限は Contents の読み取りだけでよい。書き込みや他リポジトリへのアクセスは不要。
+> `config/versions.json` の書き戻しは、ワークフロー既定の `GITHUB_TOKEN`
+> （`permissions: contents: write`）で行うため、PAT に書き込み権限を与えてはいけない。
+
+### k8s リポジトリ側から即時反映させたい場合（任意）
+
+既定では 1 日 1 回（06:17 JST）の定期実行。イメージ更新の直後に反映したい場合は、
+k8s リポジトリのワークフローから `repository_dispatch` を送る。
+
+```yaml
+- name: Notify status page
+  run: |
+    curl -X POST \
+      -H "Authorization: Bearer ${{ secrets.STATUS_PAGE_TOKEN }}" \
+      -H "Accept: application/vnd.github+json" \
+      https://api.github.com/repos/<OWNER>/<STATUS_REPO>/dispatches \
+      -d '{"event_type":"k8s-updated"}'
+```
+
+この場合、k8s リポジトリ側にステータスページリポジトリへの
+Contents: Read and write 権限を持つ PAT が別途必要になる。
+
+---
+
+## 5. Discord Bot → GitHub Actions（案C）
+
+> 手順 5 は「お知らせ機能の置き換え」の段階で実施する。ここは予定。
 
 Bot は S3 にも CloudFront にも触らない。GitHub に `repository_dispatch` を送るだけ。
 
