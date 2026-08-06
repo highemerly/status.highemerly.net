@@ -1,0 +1,82 @@
+name: Deploy
+
+# push で S3 に自動 sync する。
+# repository_dispatch は Discord Bot からのお知らせ投稿トリガー（案C）。
+on:
+  push:
+    branches: [main]
+    paths-ignore:
+      - 'docs/**'
+      - '**.md'
+  repository_dispatch:
+    types: [announcement]
+  workflow_dispatch:
+
+# 同時実行を防ぐ。後発が走ったら先発はキャンセルする
+# （--delete 付き sync が並走するとファイルが消える事故が起きるため）
+concurrency:
+  group: deploy
+  cancel-in-progress: true
+
+permissions:
+  id-token: write   # OIDC で AWS の一時認証情報を取得するために必須
+  contents: read
+
+env:
+  AWS_REGION: ap-northeast-1
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build
+        run: npm run build
+
+      # Lambda と共有する設定ファイル。Lambda は S3 の config/services.json を読む
+      - name: Copy config
+        run: |
+          mkdir -p out/config
+          cp config/services.json out/config/services.json
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      # ハッシュ付きファイル名なので、中身が変わればパスが変わる。
+      # 恒久キャッシュにしてよく、invalidation は不要。
+      - name: Sync hashed assets (immutable)
+        run: |
+          aws s3 sync out/_next/static/ "s3://${{ vars.S3_BUCKET }}/_next/static/" \
+            --cache-control "public, max-age=31536000, immutable" \
+            --delete
+
+      # HTML と設定 JSON は短命キャッシュ。
+      # data/ は Lambda が管理するので sync 対象から完全に外す（--delete で消さない）。
+      - name: Sync the rest (short cache)
+        run: |
+          aws s3 sync out/ "s3://${{ vars.S3_BUCKET }}/" \
+            --exclude "data/*" \
+            --exclude "_next/static/*" \
+            --cache-control "public, max-age=60, s-maxage=60" \
+            --delete
+
+      # CloudFront invalidation は意図的に行わない。
+      # 5分ごとの更新に対して invalidation を打つと月 $38 かかる（無料枠 1,000 パス/月）。
+      # 上記の s-maxage=60 で 60 秒以内に反映されるため不要。
+      - name: Summary
+        run: |
+          echo "### Deployed to s3://${{ vars.S3_BUCKET }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "反映まで最大 60 秒（CloudFront の s-maxage）" >> $GITHUB_STEP_SUMMARY

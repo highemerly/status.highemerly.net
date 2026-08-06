@@ -156,9 +156,13 @@ Web が生きていれば **`up` と表示される**。障害が隠れる。
 
 `h` は 1 文字 = 1 点（`1`=up / `0`=down / `d`=degraded / `-`=unknown）。
 
+実測値（12 サービス、`scripts/verify-schema.js` で計測）:
+
 | | 現状(3h) | 現状形式で48h | 新形式で48h |
 |---|---|---|---|
-| サイズ | 約 50KB | 約 800KB | **約 8KB** |
+| サイズ | 53.3KB | 819.0KB | **7.5KB** |
+
+**削減率 99.1%。** 48 時間分を持っても、現状の 3 時間分より 7 倍小さい。
 
 さらに:
 
@@ -248,36 +252,38 @@ EventBridge のスケジュールルールも、S3 の PUT（8,640 回 ≒ $0.04
 
 ---
 
-## 5. お知らせ機能をどうするか
+## 5. お知らせ機能 【決定: 案C】
 
-Discord Bot の 2 つの不具合（1-1, 1-2）はどちらも**修正可能**。
-ただし「そもそもこの構成を続けるか」は別の判断になる。
+お知らせの**正**は Git リポジトリの `content/announcements/*.md` に置く。
+Discord Bot は「投稿手段のひとつ」に降格させ、S3 を直接書かせない。
 
-### 案A: Discord を修正して継続
+```
+[Discord /announce] ──> [Lambda] ──repository_dispatch──> [GitHub Actions]
+                                                                │
+[GitHub Web UI で直接編集] ──push──────────────────────────────>│
+                                                                ▼
+                                                    [ビルド] ──> [S3]
+```
 
-- 修正内容: `await` を入れる / invalidation をやめて `s-maxage` を短くする
-- ✅ 障害時にスマホから即座に投稿できる（一番速い）
-- ❌ Lambda 2 本 + API Gateway + 署名検証を維持し続ける
-- ❌ 障害対応中に「Bot も動かない」リスクが残る
+**この構成の要点は、Discord Bot が S3 にも CloudFront にも触らなくなること。**
+Bot の役割は「GitHub に POST する」だけになり、1-2 の invalidation 問題は
+Bot の責務から完全に消える。Bot が落ちていても GitHub から投稿できる。
 
-### 案B: お知らせを Git リポジトリで管理
+残る Lambda は 1 本（`discord-interaction`）のみ。`discord-worker` は廃止する。
+S3 書き込み・CloudFront invalidation・`messages.json` の読み書きが全部不要になるため、
+worker が担っていた処理はすべて Actions 側に移る。
 
-`content/announcements/*.md` に Markdown を置き、push すると
-GitHub Actions がビルドして S3 に sync する。
+1-1 の `await` 漏れは修正必須（`repository_dispatch` の POST を await する）。
 
-- ✅ **Lambda・API Gateway・Discord 連携・invalidation が全部消える**（新アーキテクチャと同じ経路）
-- ✅ 変更履歴・レビュー・巻き戻しが git でできる
-- ✅ GitHub の Web UI からスマホでも編集できる
-- ❌ 反映までビルド + sync で 1〜2 分かかる
-- ❌ GitHub にアクセスできないと投稿できない
+### メリット / 残る課題
 
-### 案C: 両方（Bot は投稿だけ、保存先は同じ）
-
-Discord Bot は残すが、S3 に直接書くのではなく GitHub の
-`repository_dispatch` を叩いて Actions を起動する。
-
-- ✅ スマホから即投稿でき、かつ履歴も git に残る
-- ❌ 一番部品が多い
+- ✅ 障害時にスマホの Discord から即投稿できる（速さを維持）
+- ✅ 履歴・巻き戻し・レビューが git で効く
+- ✅ Bot が壊れても GitHub Web UI という代替経路がある
+- ❌ 反映まで Actions のビルド + sync で 1〜2 分かかる（Bot 経由でも同じ）
+- ❌ Lambda に GitHub の PAT（`repository_dispatch` 権限）を持たせる必要がある
+  → SSM Parameter Store に暗号化して保存。fine-grained PAT で対象リポジトリと
+    Contents 権限のみに絞る
 
 ---
 
@@ -306,10 +312,24 @@ k8s リポジトリの構成（Kustomize / Helm / 素の manifest）によって
 | 1 | GitHub リポジトリ作成 + Actions で S3 sync（OIDC） | 以降の全変更の土台。まずデプロイ経路を確立する |
 | 2 | `status.json` の新スキーマ策定 + Lambda を cron 化 | フロントの前にデータ形式を固める。1-3/1-4 のバグもここで直す |
 | 3 | フロントエンド刷新（デザイン・日英・ダークモード・期間切替） | 新スキーマの上に載せる。一番量が多い |
-| 4 | お知らせ機能の置き換え | 案 A/B/C の決定後 |
+| 4 | お知らせ機能の置き換え（案C） | 1 のデプロイ経路が前提 |
 | 5 | バージョン / リリースノート | 独立した追加機能。最後でよい |
 
 **1 と 2 の順序が重要**: 先にフロントを作ると、データ形式が変わるたびに作り直しになる。
+
+### インフラ管理 【決定: まず手動、あとで Terraform 化】
+
+新規に必要なリソース（GitHub OIDC プロバイダ、Actions 用 IAM ロール、
+EventBridge スケジュール）は AWS Console で手動作成し、手順を
+[`docs/AWS_SETUP.md`](./AWS_SETUP.md) に記録する。
+
+構成が固まった段階（目安: 手順 3 完了後）で Terraform に移す。
+既存の `terraform/` は `variables.tf` と例ファイルしか残っておらず動作しないため、
+Terraform 化の際は書き直しになる。
+
+> **後回しにするリスク**: 手動構築は「動いているが誰も再現できない」状態を生みやすい。
+> これを避けるため、手動で作ったリソースは必ず `AWS_SETUP.md` に
+> **スクリーンショットではなく設定値のテキスト**で残す。Terraform 化のときの入力になる。
 
 古いドキュメント（`MANUAL_DEPLOYMENT_GUIDE.md`, `QUICKSTART_MANUAL.md`,
 `DEPLOYMENT.md`, `AWS_ARCHITECTURE.md`）は現状すでに実態とずれている
