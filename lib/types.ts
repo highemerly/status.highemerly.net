@@ -1,131 +1,77 @@
-// Service status types
-export type ServiceStatus = 'up' | 'down' | 'degraded' | 'unknown';
+export type ServiceStatus = 'up' | 'degraded' | 'down' | 'unknown';
 
-// Category definition
+export type Lang = 'ja' | 'en';
+
+/** 日本語のみの文字列、または日英を持つオブジェクト */
+export type Localized = string | Partial<Record<Lang, string>>;
+
+/* ------------------------------------------------------------------ *
+ * config/services.json
+ * ------------------------------------------------------------------ */
+
 export interface Category {
   id: string;
-  name: string;
-  description?: string;
+  name: Localized;
+  description?: Localized;
   url?: string;
 }
 
-// Service definition
 export interface Service {
   id: string;
-  name: string;
-  prometheusQuery: string | string[];
+  name: Localized;
+  description?: Localized;
   categoryId: string;
+  prometheusQuery: string | string[];
+  /** レスポンスタイム用のクエリ。省略時はメトリック名から自動導出 */
+  latencyQuery?: string;
 }
 
-// Status history point
-export interface StatusHistoryPoint {
-  timestamp: string;
-  status: ServiceStatus;
-  value: number;
-}
-
-// Service status data
-export interface ServiceStatusData {
-  id: string;
-  status: ServiceStatus;
-  responseTime?: number;
-  uptime?: number;
-  lastChecked: string;
-  incidents: Incident[];
-  history?: StatusHistoryPoint[];
-}
-
-// Incident
-export interface Incident {
-  id: string;
-  serviceId: string;
-  startTime: string;
-  endTime?: string;
-  description: string;
-  severity: 'minor' | 'major' | 'critical';
-}
-
-// Prometheus configuration
-export interface PrometheusConfig {
-  url: string;
-  auth?: {
-    username: string;
-    password: string;
-  };
-  cacheMaxAge: number;
-}
-
-// Discord configuration
-export interface DiscordConfig {
-  webhookSecret: string;
-}
-
-// Application configuration
-export interface AppConfig {
+export interface ServicesConfig {
   categories: Category[];
   services: Service[];
-  prometheus: PrometheusConfig;
-  discord: DiscordConfig;
 }
 
-// Status cache structure
-export interface StatusCache {
-  lastUpdate: string;
-  services: ServiceStatusData[];
+/* ------------------------------------------------------------------ *
+ * data/status.json（Lambda が生成）
+ * ------------------------------------------------------------------ */
+
+export interface ServiceStatusEntry {
+  status: ServiceStatus;
+  /** レスポンスタイム（ミリ秒）。取得できなければ存在しない */
+  ms?: number;
+  /** 履歴。1 文字 = 1 点（'1'=up / 'd'=degraded / '0'=down / '-'=unknown） */
+  h: string;
 }
 
-// Admin message types
-export type MessageType = 'info' | 'warning' | 'maintenance' | 'incident';
+export interface StatusPayload {
+  v: 1;
+  updatedAt: string;
+  /** 履歴 1 点あたりの秒数（300 = 5 分） */
+  step: number;
+  /** 履歴の点数 */
+  points: number;
+  /** 履歴の先頭の時刻 */
+  from: string;
+  /** 履歴の末尾の時刻 */
+  to: string;
+  services: Record<string, ServiceStatusEntry>;
+}
 
-export interface AdminMessage {
+/* ------------------------------------------------------------------ *
+ * お知らせ
+ * ------------------------------------------------------------------ */
+
+export type AnnouncementLevel = 'info' | 'maintenance' | 'incident';
+
+export interface Announcement {
   id: string;
-  categoryId: string;
-  content: string;
-  timestamp: string;
-  author: string;
-  type: MessageType;
-  pinned?: boolean;
+  categoryId?: string;
+  level: AnnouncementLevel;
+  title: Localized;
+  body?: Localized;
+  publishedAt: string;
 }
 
-export interface StatusOverride {
-  status: 'operational' | 'degraded' | 'down';
-  timestamp: string;
-  author: string;
-}
-
-export interface MessagesCache {
-  messages: AdminMessage[];
-  statusOverrides?: Record<string, StatusOverride>;
-}
-
-// API response types
-export interface StatusApiResponse extends StatusCache {
-  meta: {
-    fromCache: boolean;
-    lastUpdate: string;
-  };
-}
-
-// Prometheus query result
-export interface PrometheusQueryResult {
-  status: string;
-  data: {
-    resultType: string;
-    result: Array<{
-      metric: Record<string, string>;
-      value: [number, string];
-    }>;
-  };
-}
-
-// Prometheus range query result
-export interface PrometheusRangeQueryResult {
-  status: string;
-  data: {
-    resultType: string;
-    result: Array<{
-      metric: Record<string, string>;
-      values: Array<[number, string]>;
-    }>;
-  };
+export interface AnnouncementsPayload {
+  announcements: Announcement[];
 }

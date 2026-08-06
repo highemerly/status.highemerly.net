@@ -1,299 +1,171 @@
-# Simple Status Page
+# status.highemerly.net
 
-Prometheus + Next.js + AWS でシンプルなステータスページ
+はんドンクラブほか各サービスのステータスページ。
 
-## 🌟 特徴
-
-- **完全サーバーレス**: AWS Lambda + S3 + CloudFront で運用
-- **コスト効率**: 月額 $1-2 程度
-- **リアルタイム監視**: Prometheus からステータスを取得
-- **Discord連携**: Slash Command でアナウンス投稿
-- **レスポンシブ**: モバイルにも対応
-- **自動更新**: 5分ごとにブラウザが自動リロード
+Prometheus のデータを 5 分ごとに Lambda が集計し、静的サイトとして CloudFront から配信する。
 
 ---
 
-## 📋 ドキュメント
+## アーキテクチャ
 
-- **[QUICKSTART_MANUAL.md](./QUICKSTART_MANUAL.md)** - AWS Console手動デプロイ（クイックスタート）
-- **[MANUAL_DEPLOYMENT_GUIDE.md](./MANUAL_DEPLOYMENT_GUIDE.md)** - AWS Console手動デプロイ（詳細版）
-- **[AWS_ARCHITECTURE.md](./AWS_ARCHITECTURE.md)** - システム設計の詳細
-- **[DEPLOYMENT.md](./DEPLOYMENT.md)** - デプロイ手順（Terraform/AWS CLI版）
-- **[SECURITY.md](./SECURITY.md)** - セキュリティと機密情報管理
+```
+[GitHub リポジトリ]
+   │ push
+   ▼
+[GitHub Actions] ──build & sync──> [S3] ──> [CloudFront] ──> [ユーザー]
+                                     ▲
+                                     │ data/status.json を 5 分ごとに更新
+                              [Lambda: update-status]
+                                     ▲
+                              [EventBridge cron(5分)]
+                                     │
+                               [Prometheus]
+```
+
+- **フロントは静的ファイルのみ**。API Gateway を経由しない
+- **CloudFront invalidation を使わない**。`Cache-Control` の `s-maxage` で制御する
+  （5 分ごとに invalidation を打つと月 $38 かかるため）
+- **AWS 認証は OIDC**。GitHub に長期のアクセスキーを置かない
+
+詳細は [docs/REBUILD_PLAN.md](docs/REBUILD_PLAN.md)、
+セットアップ手順は [docs/AWS_SETUP.md](docs/AWS_SETUP.md) を参照。
 
 ---
 
-## 🚀 クイックスタート
-
-### 前提条件
-
-- Node.js 18+
-- AWS CLI
-- Terraform
-- Prometheus インスタンス
-
-### ローカル開発（従来のNext.js SSR版）
+## ローカル開発
 
 ```bash
-# 依存関係インストール
 npm install
-
-# 環境変数設定
-cp .env.example .env
-# .env を編集
-
-# 開発サーバー起動
-npm run dev
+node scripts/dev-data.js   # ダミーの status.json を public/ に生成
+npm run dev                # http://localhost:3000
 ```
 
-ブラウザで http://localhost:3000 にアクセス
-
-### AWSデプロイ
-
-#### オプション1: AWS Console手動デプロイ（推奨・初心者向け）
-
-TerraformやAWS CLIを使わず、GUIのみでデプロイ:
-
-- **クイックスタート**: [QUICKSTART_MANUAL.md](./QUICKSTART_MANUAL.md)
-- **詳細ガイド**: [MANUAL_DEPLOYMENT_GUIDE.md](./MANUAL_DEPLOYMENT_GUIDE.md)
-
-#### オプション2: Terraform + AWS CLI（自動化）
-
-詳細は [DEPLOYMENT.md](./DEPLOYMENT.md) を参照
+`scripts/dev-data.js` は 48 時間分のダミー履歴（障害を数回含む）を作る。
+生成物は `.gitignore` 済みで、設定の正本は `config/services.json` のみ。
 
 ```bash
-# 1. Terraformでインフラ構築
-cd terraform
-terraform init
-terraform apply
+npm run build              # 静的エクスポート（out/ に出力）
+node scripts/verify-schema.js   # スキーマとマージロジックの検証
+```
 
-# 2. 初期データ配置
-./scripts/init-s3-data.sh
+---
 
-# 3. Lambda関数デプロイ
+## デプロイ
+
+`main` に push すると [GitHub Actions](.github/workflows/deploy.yml) が S3 に sync する。
+手動実行は Actions タブの **Deploy** から。
+
+反映までの時間は最大 60 秒（CloudFront の `s-maxage`）。
+
+Lambda は別途デプロイする:
+
+```bash
 ./scripts/deploy-lambda.sh
-
-# 4. フロントエンドデプロイ
-./scripts/deploy-frontend.sh
 ```
 
 ---
 
-## 🏗️ アーキテクチャ
+## データ形式
 
-```
-[ユーザー] → [CloudFront] → [S3] (静的HTML/JSON)
-                          ↓
-                     [API Gateway] → [Lambda]
-                                        ↓
-                                   [Prometheus]
-
-[Discord] → [Slash Command] → [API Gateway] → [Lambda] → [S3]
-```
-
-### 主要コンポーネント
-
-| コンポーネント | 役割 |
-|--------------|------|
-| **CloudFront** | CDN、HTTPS終端 |
-| **S3** | 静的ファイル、JSON保存 |
-| **Lambda: UpdateStatus** | Prometheusからデータ取得 |
-| **Lambda: DiscordInteraction** | Discord連携 |
-| **API Gateway** | Lambda へのルーティング |
-| **Route53** | DNS |
-
----
-
-## ⏱️ データ更新タイミング
-
-| 項目 | 時間 |
-|-----|------|
-| CloudFrontキャッシュ | 120秒 |
-| Lambda更新判定 | 3分 |
-| ブラウザ更新リクエスト | 5分 |
-| ブラウザ自動リロード | 5分 |
-
-ユーザーが体感する最大遅延: **7分**
-
----
-
-## 🎮 Discord連携
-
-### Slash Command
-
-```
-/announce category:handon-club action:create message:メンテナンスのお知らせ
-→ カテゴリにメッセージを追加
-
-/announce category:handon-club action:delete
-→ カテゴリのメッセージを削除
-```
-
-### セキュリティ
-
-- Discord Public Key による署名検証
-- Discord側でコマンド実行権限を管理可能
-
----
-
-## 📁 ディレクトリ構成
-
-```
-.
-├── app/                    # Next.jsアプリ
-│   ├── page.tsx           # メインページ（SSR版）
-│   ├── page-client.tsx    # クライアント版（AWS用）
-│   └── api/               # API Routes（ローカル開発用）
-├── components/            # Reactコンポーネント
-├── lib/                   # ユーティリティ
-├── lambda/                # Lambda関数
-│   ├── update-status/    # ステータス更新
-│   └── discord-interaction/ # Discord連携
-├── scripts/               # デプロイスクリプト
-├── terraform/             # Terraformコード
-└── config/
-    └── services.json      # サービス設定
-```
-
----
-
-## 🔧 設定ファイル
-
-### config/services.json
-
-サービス定義のみを含む（**機密情報なし**）。Git管理可能。
+`data/status.json`（Lambda が生成、48 時間分で約 7.5KB）:
 
 ```json
 {
-  "categories": [
-    {
-      "id": "handon-club",
-      "name": "はんドンクラブ / handon.club",
-      "description": "汎用Mastodonサーバー。",
-      "url": "https://handon.club/"
-    }
-  ],
-  "services": [
-    {
-      "id": "handon-web",
-      "name": "Web",
-      "prometheusQuery": "probe_http_status_code{...}",
-      "categoryId": "handon-club"
-    }
-  ]
+  "v": 1,
+  "updatedAt": "2026-08-06T12:00:00.000Z",
+  "step": 300,
+  "points": 576,
+  "from": "2026-08-04T12:05:00.000Z",
+  "to": "2026-08-06T12:00:00.000Z",
+  "services": {
+    "handon-web": { "status": "up", "ms": 142, "h": "111111d0011111..." }
+  }
 }
 ```
 
-### 機密情報の管理
+`h` は履歴で、**1 文字が 1 点（5 分）**を表す。
 
-Prometheus認証情報やDiscord公開鍵などの機密情報は、**AWS SSM Parameter Store**で管理します：
+| 文字 | 意味 |
+|---|---|
+| `1` | 正常 |
+| `d` | 一部で問題（複数コンポーネントのうち一部が停止） |
+| `0` | 停止 |
+| `-` | 不明（データなし） |
 
-```bash
-# Prometheus
-/status-page/prometheus/url         # Prometheus URL
-/status-page/prometheus/username    # 認証ユーザー名（暗号化）
-/status-page/prometheus/password    # 認証パスワード（暗号化）
+各点にタイムスタンプを持たせず `from` / `step` から逆算するため、
+48 時間分を持っても 7.5KB に収まる（素朴な形式なら 819KB）。
 
-# Discord
-/status-page/discord/public-key     # Discord公開鍵（暗号化）
-```
-
-詳細は [SECURITY.md](./SECURITY.md) を参照してください。
-
----
-
-## 💰 コスト試算
-
-| サービス | 月額 |
-|---------|------|
-| CloudFront | $0.15 - $1.00 |
-| S3 | $0.02 - $0.50 |
-| Lambda | 無料枠内 |
-| API Gateway | $0.00 - $0.50 |
-| Route53 | $0.50 |
-| **合計** | **$0.70 - $2.50** |
+表示期間の切り替え（1h / 3h / 12h / 24h / 48h）は、この文字列の末尾を切るだけで済む。
+追加のリクエストは発生しない。
 
 ---
 
-## 🛠️ 開発
+## 設定
 
-### ローカルテスト
+### config/services.json
 
-```bash
-npm run dev
+サービス定義。機密情報を含まないので git 管理できる。
+`name` と `description` は文字列（日本語のみ）か `{ "ja": "...", "en": "..." }` を受け付ける。
+
+```json
+{
+  "id": "handon-web",
+  "name": "Web",
+  "description": { "ja": "投稿の閲覧と作成", "en": "Browsing and posting" },
+  "prometheusQuery": "probe_http_status_code{endpoint='web', service='handon'}",
+  "categoryId": "handon-club"
+}
 ```
 
-### ビルド
+`prometheusQuery` に配列を渡すと、複数コンポーネントをまとめて 1 サービスとして扱う。
+全部正常なら `up`、一部だけ停止なら `degraded`、全部停止なら `down`。
 
-```bash
-# SSR版
-npm run build
+### 機密情報
 
-# 静的エクスポート版（AWS用）
-cp next.config.aws.js next.config.js
-npm run build
+AWS SSM Parameter Store で管理する。
+
+```
+/status-page/prometheus/url
+/status-page/prometheus/username    (SecureString)
+/status-page/prometheus/password    (SecureString)
+/status-page/discord/public-key     (SecureString)
 ```
 
-### Linting
-
-```bash
-npm run lint
-```
+詳細は [SECURITY.md](SECURITY.md)。
 
 ---
 
-## 🚢 デプロイ
+## 技術スタック
 
-### Lambda関数
-
-```bash
-./scripts/deploy-lambda.sh
-```
-
-### フロントエンド
-
-```bash
-export S3_BUCKET=status-highemerly-net
-export CLOUDFRONT_DISTRIBUTION_ID=E1234567890ABC
-./scripts/deploy-frontend.sh
-```
+- Next.js 16（静的エクスポート）+ TypeScript + TailwindCSS
+- AWS Lambda / S3 / CloudFront / EventBridge / Route53
+- Prometheus
+- GitHub Actions
 
 ---
 
-## 🐛 トラブルシューティング
+## 進行中の作り直し
 
-### ステータスが更新されない
+[docs/REBUILD_PLAN.md](docs/REBUILD_PLAN.md) に計画と、旧実装の不具合の原因分析がある。
 
-1. Lambda関数のCloudWatch Logsを確認
-2. Prometheus接続情報が正しいか確認
-3. SSM Parameterが設定されているか確認
+| # | 内容 | 状態 |
+|---|---|---|
+| 1 | GitHub Actions で S3 sync（OIDC） | コード完了 / AWS 側の設定待ち |
+| 2 | status.json 新スキーマ + Lambda cron 化 | コード完了 / AWS 側の設定待ち |
+| 3 | フロントエンド刷新 | 完了 |
+| 4 | お知らせ機能の置き換え（Discord → GitHub Actions） | 未着手 |
+| 5 | バージョン / リリースノート表示 | 未着手 |
 
-### Discord連携が動かない
-
-1. Discord Public Keyが正しいか確認
-2. Interactions Endpoint URLが設定されているか確認
-3. Lambda関数のログを確認
-
-詳細は [DEPLOYMENT.md](./DEPLOYMENT.md) を参照
-
----
-
-## 📝 技術スタック
-
-- **フロントエンド**: Next.js 14 + TypeScript + TailwindCSS
-- **インフラ**: AWS (Lambda, S3, CloudFront, API Gateway, Route53)
-- **IaC**: Terraform
-- **データソース**: Prometheus
-- **通知**: Discord Slash Commands
+> **以下のドキュメントは旧アーキテクチャのもので、内容が古い。**
+> 手順 4・5 の完了後に整理する。
+> `MANUAL_DEPLOYMENT_GUIDE.md` / `QUICKSTART_MANUAL.md` / `DEPLOYMENT.md` / `AWS_ARCHITECTURE.md`
 
 ---
 
-## 📝 ライセンス
+## ライセンス
 
 MIT
 
----
-
-## 👤 Author
+## Author
 
 はん (highemerly)

@@ -56,3 +56,7 @@ next-env.d.ts
 
 # stray lambda build artifact
 lambda/discord-interaction/ziU0D7pA
+
+# ローカル開発用の生成物（scripts/dev-data.js が作る）
+/public/data/
+/public/config/

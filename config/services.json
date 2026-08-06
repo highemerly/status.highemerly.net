@@ -2,38 +2,56 @@
   "categories": [
     {
       "id": "handon-club",
-      "name": "はんドンクラブ",
-      "description": "汎用Mastodonサーバーのhandon.club。",
+      "name": { "ja": "はんドンクラブ", "en": "Handon Club" },
+      "description": {
+        "ja": "誰でも参加できる汎用の Mastodon サーバーです。",
+        "en": "A general-purpose Mastodon server open to everyone."
+      },
       "url": "https://handon.club/"
     },
     {
       "id": "hiyoko-club",
-      "name": "ひよこスキー",
-      "description": "子育て関連のMisskeyサーバーのhiyoko.club。",
+      "name": { "ja": "ひよこスキー", "en": "Hiyoko Ski" },
+      "description": {
+        "ja": "子育てに関する話題を中心とした Misskey サーバーです。",
+        "en": "A Misskey server centred on parenting and childcare."
+      },
       "url": "https://mi.hiyoko.club/"
     },
     {
       "id": "hosteka",
       "name": "Hosteka",
-      "description": "Fediverseアカウントでログインしてオフ会参加者を募るサービス。",
+      "description": {
+        "ja": "Fediverse のアカウントでログインし、オフ会の参加者を募集できるサービスです。",
+        "en": "Organise meetups and gather attendees by signing in with a Fediverse account."
+      },
       "url": "https://hosteka.piyo.me/"
     },
     {
       "id": "shamezo",
       "name": "SHAMEZO",
-      "description": "画像にテキストを合成する写真共有SNS。",
+      "description": {
+        "ja": "画像にテキストを合成して共有できる写真 SNS です。",
+        "en": "A photo-sharing service for compositing text onto images."
+      },
       "url": "https://pic.handon.club/"
     },
     {
       "id": "anypost",
       "name": "anypost",
-      "description": "一つのリンクから、Fediverse・既存SNSなど任意の投稿先に投稿できるサービス。",
+      "description": {
+        "ja": "ひとつのリンクから、Fediverse や既存 SNS など好きな投稿先に投稿できるサービスです。",
+        "en": "Post to the Fediverse and other social networks from a single link."
+      },
       "url": "https://anypost.dev/"
     },
     {
       "id": "dominion",
-      "name": "ふつうのドミニオンセレクタ",
-      "description": "ボードゲーム「ドミニオン」を遊ぶ際に必要なランダマイザーの選出を行うサービス。",
+      "name": { "ja": "ふつうのドミニオンセレクタ", "en": "Dominion Selector" },
+      "description": {
+        "ja": "ボードゲーム「ドミニオン」で使うサプライを、ランダムに選出するサービスです。",
+        "en": "Randomly picks the kingdom card supply for the board game Dominion."
+      },
       "url": "https://dominion.highemerly.net/"
     }
   ],
@@ -41,36 +59,60 @@
     {
       "id": "handon-web",
       "name": "Web",
+      "description": {
+        "ja": "投稿の閲覧と作成を行う Web インターフェース",
+        "en": "Web interface for reading and writing posts"
+      },
       "prometheusQuery": "probe_http_status_code{endpoint='web', env='production', service='handon'}",
       "categoryId": "handon-club"
     },
     {
       "id": "handon-streaming",
       "name": "Streaming",
+      "description": {
+        "ja": "タイムラインのリアルタイム更新",
+        "en": "Real-time timeline updates"
+      },
       "prometheusQuery": "probe_http_status_code{endpoint='streaming', env='production', service='handon'}",
       "categoryId": "handon-club"
     },
     {
       "id": "handon-media",
       "name": "Media",
+      "description": {
+        "ja": "画像・動画の配信",
+        "en": "Image and video delivery"
+      },
       "prometheusQuery": "probe_http_status_code{endpoint='media', env='production', service='handon'}",
       "categoryId": "handon-club"
     },
     {
       "id": "handon-search",
       "name": "Search",
+      "description": {
+        "ja": "投稿の全文検索",
+        "en": "Full-text search over posts"
+      },
       "prometheusQuery": "probe_http_status_code{endpoint='search', env='production', service='handon'}",
       "categoryId": "handon-club"
     },
     {
       "id": "hiyoko-web",
       "name": "Web",
+      "description": {
+        "ja": "投稿の閲覧と作成を行う Web インターフェース",
+        "en": "Web interface for reading and writing posts"
+      },
       "prometheusQuery": "probe_http_status_code{endpoint='media', env='production', service='hiyoko'}",
       "categoryId": "hiyoko-club"
     },
     {
       "id": "hiyoko-media",
       "name": "Media",
+      "description": {
+        "ja": "画像・動画の配信",
+        "en": "Image and video delivery"
+      },
       "prometheusQuery": "probe_http_status_code{endpoint='media', env='production', service='hiyoko'}",
       "categoryId": "hiyoko-club"
     },
@@ -83,24 +125,40 @@
     {
       "id": "anypost-web",
       "name": "Front",
+      "description": {
+        "ja": "投稿画面",
+        "en": "Posting interface"
+      },
       "prometheusQuery": "probe_http_status_code{endpoint='web', env='production', service='anypost'}",
       "categoryId": "anypost"
     },
     {
       "id": "anypost-api",
       "name": "Fediverse API",
+      "description": {
+        "ja": "各 SNS への投稿処理",
+        "en": "Delivery to each social network"
+      },
       "prometheusQuery": "probe_http_status_code{endpoint='api', env='production', service='anypost'}",
       "categoryId": "anypost"
     },
     {
       "id": "dominion-static",
       "name": "Front",
+      "description": {
+        "ja": "選出画面",
+        "en": "Selection interface"
+      },
       "prometheusQuery": "probe_http_status_code{endpoint='static', env='production', service='dominion'}",
       "categoryId": "dominion"
     },
     {
       "id": "dominion-api",
       "name": "Dominion API",
+      "description": {
+        "ja": "サプライの選出処理",
+        "en": "Supply randomisation"
+      },
       "prometheusQuery": "probe_http_status_code{endpoint='api', env='production', service='dominion'}",
       "categoryId": "dominion"
     },

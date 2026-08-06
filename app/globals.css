@@ -2,32 +2,89 @@
 @tailwind components;
 @tailwind utilities;
 
-:root {
-  --foreground-rgb: 0, 0, 0;
-  --background-start-rgb: 214, 219, 220;
-  --background-end-rgb: 255, 255, 255;
-}
-
-@media (prefers-color-scheme: dark) {
+/*
+ * 配色は「落ち着いた実務型」。
+ * 彩度はステータス表示にだけ使い、それ以外はグレースケールに寄せる。
+ * 障害が起きたときに、色が付いている場所＝異常、と一目で分かる状態を保つ。
+ */
+@layer base {
   :root {
-    --foreground-rgb: 255, 255, 255;
-    --background-start-rgb: 0, 0, 0;
-    --background-end-rgb: 0, 0, 0;
+    --bg: 250 250 249;
+    --surface: 255 255 255;
+    --surface-raised: 244 244 245;
+    --line: 228 228 231;
+    --fg: 24 24 27;
+    --fg-muted: 82 82 91;
+    --fg-subtle: 113 113 122;
+    --accent: 37 99 235;
+
+    /* ライトは背景が明るいぶん、色は濃いめにしてコントラストを確保する */
+    --status-up: 22 163 74;
+    --status-degraded: 202 138 4;
+    --status-down: 220 38 38;
+    --status-unknown: 161 161 170;
+  }
+
+  .dark {
+    --bg: 12 14 18;
+    --surface: 23 26 33;
+    --surface-raised: 32 36 45;
+    --line: 44 49 60;
+    --fg: 244 244 245;
+    --fg-muted: 161 161 170;
+    --fg-subtle: 113 113 122;
+    --accent: 96 165 250;
+
+    /* ダークは暗い背景に載るので、明度を上げないと沈む */
+    --status-up: 74 222 128;
+    --status-degraded: 250 204 21;
+    --status-down: 248 113 113;
+    --status-unknown: 82 82 91;
+  }
+
+  html {
+    -webkit-text-size-adjust: 100%;
+  }
+
+  body {
+    @apply bg-bg text-fg antialiased;
+  }
+
+  /* キーボード操作時だけフォーカスリングを出す */
+  :focus-visible {
+    @apply outline-none ring-2 ring-accent ring-offset-2 ring-offset-bg;
   }
 }
 
-body {
-  color: rgb(var(--foreground-rgb));
-  background: linear-gradient(
-      to bottom,
-      transparent,
-      rgb(var(--background-end-rgb))
-    )
-    rgb(var(--background-start-rgb));
+@layer components {
+  /*
+   * タイムラインのバー。
+   * 色だけに頼らないよう、down は下端から伸ばして「欠け」として形でも分かるようにする。
+   */
+  .bar {
+    @apply w-full rounded-[1px] transition-opacity;
+  }
+
+  .bar:hover {
+    @apply opacity-60;
+  }
 }
 
-@layer utilities {
-  .text-balance {
-    text-wrap: balance;
+/* 「更新しました」の一瞬だけ光る演出。派手さは出さない */
+@keyframes flash {
+  from {
+    background-color: rgb(var(--accent) / 0.12);
+  }
+  to {
+    background-color: transparent;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
   }
 }
