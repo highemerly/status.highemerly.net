@@ -35,7 +35,7 @@ export default function HomePage() {
       // 設定と稼働状況は必須。お知らせは無くても画面は成立する
       const [configRes, statusRes] = await Promise.all([
         fetch('/config/services.json'),
-        fetch('/data/status.json'),
+        fetch('/data/status.v1.json'),
       ]);
       if (!configRes.ok || !statusRes.ok) throw new Error('fetch failed');
 

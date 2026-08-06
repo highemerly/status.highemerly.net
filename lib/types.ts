@@ -44,7 +44,7 @@ export interface ServicesConfig {
 }
 
 /* ------------------------------------------------------------------ *
- * data/status.json（Lambda が生成）
+ * data/status.v1.json（Lambda が生成）
  * ------------------------------------------------------------------ */
 
 export interface ServiceStatusEntry {

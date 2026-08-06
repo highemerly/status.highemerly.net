@@ -2,7 +2,7 @@
 /**
  * 新 Lambda が出力した status.json を検証する。
  *
- *   node scripts/verify-status-json.js https://status.highemerly.net/data/status-v2.json
+ *   node scripts/verify-status-json.js https://status.highemerly.net/data/status.v1.json
  *   node scripts/verify-status-json.js ./downloaded.json
  *
  * 新旧 Lambda を並行稼働させている間、新しい出力が本当に正しいかを

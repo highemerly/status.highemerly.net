@@ -2,7 +2,7 @@
 /**
  * ローカル開発用のダミーデータを public/ に生成する。
  *
- * 本番では data/status.json は Lambda が S3 に置き、config/services.json は
+ * 本番では data/status.v1.json は Lambda が S3 に置き、config/services.json は
  * GitHub Actions が配置する。開発時はそれらが無いので、ここで用意する。
  * 生成物は .gitignore 済み（config の正本は config/services.json のみ）。
  */
@@ -107,7 +107,7 @@ function write(relative, data) {
   console.log(`${relative}  ${kb}KB`);
 }
 
-write('public/data/status.json', status);
+write('public/data/status.v1.json', status);
 write('public/content/announcements.json', announcements);
 write('public/config/services.json', config);
 

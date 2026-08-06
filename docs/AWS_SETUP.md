@@ -132,23 +132,38 @@ IAM → ロール → **ロールを作成** → カスタム信頼ポリシー
 旧 Lambda は「アクセス契機で `data/status.json` を更新する」構成のまま生かしておく。
 本番のステータスページは切り替えの瞬間まで従来どおり動き続ける。
 
+### 鍵になる考え方: ファイル名にスキーマ版を含める
+
+**新旧で書き込み先のファイルを分ける。**
+
+| ファイル | 書く主体 | 読む主体 |
+|---|---|---|
+| `data/status.json`（旧スキーマ） | 旧 Lambda | 旧フロントエンド |
+| `data/status.v1.json`（新スキーマ） | **新 Lambda** | **新フロントエンド** |
+
+こうすると **新 Lambda は `data/status.json` を一度も書かない**。
+IAM ポリシーからも本番のキーを外せるので、**権限の上で本番を壊せない**。
+検証中にどれだけ失敗しても、稼働中のサイトには影響が及ばない。
+
+切り替えは**新フロントエンドをデプロイするだけ**で完了する。
+Lambda 側の操作も、両者のタイミングを合わせる必要もない。
+
+> 将来スキーマを変えるときも `status.v2.json` を作れば同じ手が使える。
+> ファイル名の `v1` は、中身の `"v": 1` と一致している。
+
 ### 全体の流れ
 
 ```
-[2-1〜2-3] 新ロール・新 Lambda を作る（出力先は data/status-v2.json）
+[2-1〜2-3] 新ロール・新 Lambda を作る（出力先は data/status.v1.json）
      ↓
-[2-4] 手動実行して検証   ← ここまで本番に影響なし。失敗しても何も壊れない
+[2-4] 手動実行して検証   ← 本番に影響なし。失敗しても何も壊れない
      ↓
 [2-5] EventBridge で 5 分ごとに回し、しばらく様子を見る
      ↓
-[2-6] 出力先を data/status.json に変更 ＋ 新フロントエンドをデプロイ  ← 切り替え
+[2-6] 新フロントエンドをデプロイ   ← これだけで切り替え完了
      ↓
 [2-7] 旧 Lambda と API Gateway を止める（削除は数日置いてから）
 ```
-
-> **切り替え前に新 Lambda が `data/status.json` を書いてはいけない。**
-> 本番のフロントエンドはまだ旧スキーマしか読めないので、上書きするとサイトが壊れる。
-> そのため環境変数 `STATUS_KEY` で出力先を逃がす。
 
 ---
 
@@ -164,8 +179,12 @@ IAM → ロール → **ロールを作成** → 信頼されたエンティテ�
 | 対象 | 操作 |
 |---|---|
 | `config/services.json` | 読む |
-| `data/status.json` と `data/status-v2.json` | 書く |
+| `data/status.v1.json` | 書く |
 | `/status-page/prometheus/*` | 読む（`WithDecryption: true`） |
+
+> **`data/status.json` は含めない。** 本番が読んでいるファイルへの
+> 書き込み権限を最初から与えないことで、設定ミスやコードのバグで
+> 本番を壊す経路そのものを塞ぐ。
 
 ```json
 {
@@ -181,10 +200,7 @@ IAM → ロール → **ロールを作成** → 信頼されたエンティテ�
       "Sid": "WriteStatus",
       "Effect": "Allow",
       "Action": "s3:PutObject",
-      "Resource": [
-        "arn:aws:s3:::status-highemerly-net/data/status.json",
-        "arn:aws:s3:::status-highemerly-net/data/status-v2.json"
-      ]
+      "Resource": "arn:aws:s3:::status-highemerly-net/data/status.v1.json"
     },
     {
       "Sid": "ReadPrometheusCredentials",
@@ -204,9 +220,6 @@ IAM → ロール → **ロールを作成** → 信頼されたエンティテ�
   ]
 }
 ```
-
-> 検証用の `data/status-v2.json` も許可対象に入れてある。
-> 手順 2-7 が終わったらこの行は消してよい。
 
 さらに、マネージドポリシー **`AWSLambdaBasicExecutionRole`** をアタッチする
 （CloudWatch Logs への書き込み用）。
@@ -233,7 +246,7 @@ IAM → ロール → **ロールを作成** → 信頼されたエンティテ�
 
 | プレフィックス | 書く主体 | 内容 |
 |---|---|---|
-| `data/` | **Lambda のみ** | `status.json` |
+| `data/` | **Lambda のみ** | `status.v1.json` |
 | それ以外（`config/`, `content/`, `_next/`, HTML） | **GitHub Actions のみ** | ビルド成果物、設定、お知らせ |
 
 Actions 側は [手順 1-2](#1-2-デプロイ用-iam-ロールを作成) の `ProtectLambdaManagedData` で
@@ -278,9 +291,11 @@ AWS SDK v3 は Node.js 22 ランタイムに同梱されているものを使う
 
 | キー | 値 | 備考 |
 |---|---|---|
-| `S3_BUCKET` | `status-highemerly-net` | |
-| `STATUS_KEY` | `data/status-v2.json` | **検証中はこれ。切り替え時に `data/status.json` へ変更する** |
-| `HISTORY_HOURS` | `48` | 履歴の保持時間 |
+| `S3_BUCKET` | `status-highemerly-net` | 必須 |
+| `HISTORY_HOURS` | `48` | 省略時は 48。履歴の保持時間 |
+
+> `STATUS_KEY` は設定しなくてよい。既定で `data/status.v1.json` に書く。
+> 別の場所に吐いて試したいときだけ使う。
 
 ### 2-4. 手動実行して検証する
 
@@ -292,14 +307,14 @@ Lambda コンソール → **テスト** タブ → イベント JSON は `{}` �
 **成功時のログ**（CloudWatch Logs）:
 
 ```
-Wrote data/status-v2.json: 12 services, 7.5KB, 3421ms, {"up":12}
+Wrote data/status.v1.json: 12 services, 7.5KB, 3421ms, {"up":12}
 ```
 
 次に、出力された JSON を検証する。ローカルから:
 
 ```bash
-curl -s https://status.highemerly.net/data/status-v2.json -o /tmp/v2.json
-node scripts/verify-status-json.js /tmp/v2.json
+curl -s https://status.highemerly.net/data/status.v1.json -o /tmp/status.json
+node scripts/verify-status-json.js /tmp/status.json
 ```
 
 検証内容は、5 分境界に揃っているか・履歴の長さが `points` と一致するか・
@@ -343,32 +358,38 @@ Amazon EventBridge → ルール → **ルールを作成**
 `最終更新` が 5 分以内になっていれば cron が効いている。
 
 ```bash
-curl -s https://status.highemerly.net/data/status-v2.json -o /tmp/v2.json
-node scripts/verify-status-json.js /tmp/v2.json
+curl -s https://status.highemerly.net/data/status.v1.json -o /tmp/status.json
+node scripts/verify-status-json.js /tmp/status.json
 ```
 
 ### 2-6. 本番へ切り替える
 
-**新旧のスキーマは互換性がない。Lambda とフロントエンドを同時に切り替える。**
+**新フロントエンドをデプロイするだけ。** AWS 側の操作は要らない。
 
-1. 新フロントエンドをデプロイする（`main` に push → Deploy ワークフロー）
-   - この時点ではまだ `data/status.json` は旧スキーマなので、
-     サイトは「読み込み中」または読み込みエラーになる
-2. **すぐに** Lambda の環境変数 `STATUS_KEY` を `data/status.json` に変更して保存
-3. Lambda を手動で 1 回テスト実行し、`data/status.json` を新スキーマで上書きする
-4. サイトを再読み込みして表示を確認する
+```bash
+git checkout main
+git merge rebuild
+git push          # Deploy ワークフローが走る
+```
+
+新フロントエンドは `data/status.v1.json` を読む。このファイルは
+2-5 の時点ですでに 5 分ごとに更新されているので、
+デプロイが終わった瞬間から正しい値が表示される。
 
 CloudFront のキャッシュは `s-maxage=60` なので、最大 60 秒で反映される。
 
-> **順序を逆にしないこと。** 先に Lambda を切り替えると、
-> 旧フロントエンドが新スキーマを読んで壊れた表示になる時間が生まれる。
-> フロントエンドを先に出せば、最悪でも「読み込み中」で止まるだけで済む。
+> 旧 Lambda はまだ `data/status.json` を更新し続けているが、
+> 新フロントエンドはそれを読まないので影響しない。
 
 **切り戻し方**
 
-1. Lambda の `STATUS_KEY` を `data/status-v2.json` に戻す
-2. リポジトリを `git revert` して push（旧フロントエンドに戻る）
-3. 旧 Lambda を手動実行して `data/status.json` を旧スキーマに戻す
+```bash
+git revert <マージコミット>
+git push
+```
+
+これだけ。旧フロントエンドは `data/status.json`（旧 Lambda が更新中）を読むので、
+そのまま元の表示に戻る。**AWS の設定を触る必要はない。**
 
 ### 2-7. 旧構成を止める
 
@@ -377,8 +398,10 @@ CloudFront のキャッシュは `s-maxage=60` なので、最大 60 秒で反�
 1. 旧 `UpdateStatusFunction` を呼んでいる **API Gateway のルート `/api/v1/status` を削除**
    - 新フロントエンドはこのエンドポイントを一切呼ばない
 2. 旧 `UpdateStatusFunction` を削除
-3. 2-1 のポリシーから `data/status-v2.json` の行を削除
-4. S3 の `data/status-v2.json` を削除
+3. S3 の `data/status.json` を削除
+
+> 3 まで済ませると切り戻し先が無くなる。1・2 を先に数日運用して、
+> 問題が出ないと確信してから 3 に進むこと。
 
 > Discord 用の Lambda（`HandleDiscordInteractionFunction` /
 > `DiscordCommandWorkerFunction`）はここでは触らない。手順 5 で扱う。
@@ -407,7 +430,7 @@ invalidation をやめ、オブジェクトごとの `Cache-Control` で制御�
 |---|---|---|
 | `/_next/static/*` | `public, max-age=31536000, immutable` | [`deploy.yml`](../.github/workflows/deploy.yml) |
 | HTML・`config/services.json` | `public, max-age=60, s-maxage=60` | [`deploy.yml`](../.github/workflows/deploy.yml) |
-| `data/status.json` | `public, max-age=60, s-maxage=60` | Lambda の `PutObject` |
+| `data/status.v1.json` | `public, max-age=60, s-maxage=60` | Lambda の `PutObject` |
 
 CloudFront のキャッシュポリシーは、オリジンの `Cache-Control` を尊重する設定
 （`CachingOptimized` など、Min TTL=0 / Default TTL=86400 / Max TTL=31536000）であればよい。

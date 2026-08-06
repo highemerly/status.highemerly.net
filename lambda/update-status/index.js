@@ -2,7 +2,7 @@
  * UpdateStatusFunction
  *
  * EventBridge から 5 分ごとに起動され、Prometheus を読んで
- * S3 の data/status.json を更新する。
+ * S3 の data/status.v1.json を更新する。
  *
  * 旧実装との違い:
  *  - アクセス契機の更新判定を廃止（EventBridge cron に一本化）
@@ -20,11 +20,13 @@ const ssmClient = new SSMClient({ region: REGION });
 
 const S3_BUCKET = process.env.S3_BUCKET;
 
-// 出力先。新旧の Lambda を並行稼働させる間は data/status-v2.json に逃がし、
-// 本番切り替え時に data/status.json へ変える。
-// 旧フロントエンドは旧スキーマしか読めないので、いきなり本番のキーを
-// 上書きするとサイトが壊れる。
-const STATUS_KEY = process.env.STATUS_KEY || 'data/status.json';
+// 出力先。ファイル名にスキーマ版を含める。
+//
+// 旧 Lambda が書く data/status.json は最後まで触らない。フロントエンドは
+// 自分が読めるスキーマのファイルだけを見るので、新旧が同じ鍵を奪い合わない。
+// 切り替えはフロントエンドをデプロイするだけで済み、Lambda 側の操作が要らない。
+// 将来スキーマを変えるときも status.v2.json を作れば同じ手が使える。
+const STATUS_KEY = process.env.STATUS_KEY || 'data/status.v1.json';
 
 const HISTORY_HOURS = parseInt(process.env.HISTORY_HOURS || '48', 10);
 const STEP_SECONDS = 300; // 5 分。フロントの表示単位と一致させる

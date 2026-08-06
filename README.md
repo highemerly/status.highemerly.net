@@ -14,7 +14,7 @@ Prometheus のデータを 5 分ごとに Lambda が集計し、静的サイト�
    ▼
 [GitHub Actions] ──build & sync──> [S3] ──> [CloudFront] ──> [ユーザー]
                                      ▲
-                                     │ data/status.json を 5 分ごとに更新
+                                     │ data/status.v1.json を 5 分ごとに更新
                               [Lambda: update-status]
                                      ▲
                               [EventBridge cron(5分)]
@@ -48,7 +48,7 @@ npm run build              # 静的エクスポート（out/ に出力）
 node scripts/verify-schema.js   # スキーマとマージロジックの検証
 
 # Lambda が出力した status.json の検証（切り替え判断に使う）
-node scripts/verify-status-json.js https://status.highemerly.net/data/status-v2.json
+node scripts/verify-status-json.js https://status.highemerly.net/data/status.v1.json
 
 # 稼働バージョンの取得（k8s リポジトリを読む）
 K8S_REPO=../k8sg1 GITHUB_TOKEN=$(gh auth token) node scripts/build-versions.js
@@ -73,7 +73,7 @@ Lambda は別途デプロイする:
 
 ## データ形式
 
-`data/status.json`（Lambda が生成、48 時間分で約 7.5KB）:
+`data/status.v1.json`（Lambda が生成、48 時間分で約 7.5KB）:
 
 ```json
 {
