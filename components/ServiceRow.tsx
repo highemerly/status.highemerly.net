@@ -23,23 +23,13 @@ export function ServiceRow({
 }) {
   const status = entry?.status ?? 'unknown';
   const rate = entry ? uptime(entry.h, hours, payload.step) : null;
-  const description = localized(service.description, lang);
 
   return (
-    <div className="py-3.5">
-      <div className="flex items-baseline justify-between gap-3">
-        <div className="min-w-0">
-          <div className="flex items-center gap-2">
-            <StatusIcon status={status} size={12} />
-            <span className="truncate text-sm font-medium">
-              {localized(service.name, lang)}
-            </span>
-          </div>
-          {description && (
-            <p className="mt-0.5 pl-5 text-xs leading-relaxed text-fg-subtle">
-              {description}
-            </p>
-          )}
+    <div className="py-3">
+      <div className="flex items-center justify-between gap-3">
+        <div className="flex min-w-0 items-center gap-2">
+          <StatusIcon status={status} size={11} />
+          <span className="truncate text-sm">{localized(service.name, lang)}</span>
         </div>
 
         {/* 数値は等幅にして、行ごとに桁がずれないようにする */}

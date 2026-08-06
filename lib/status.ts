@@ -8,6 +8,16 @@ const DECODE: Record<string, ServiceStatus> = {
   '-': 'unknown',
 };
 
+const ENCODE: Record<ServiceStatus, string> = {
+  up: '1',
+  degraded: 'd',
+  down: '0',
+  unknown: '-',
+};
+
+/** 1 本のバーが何本の点をまとめるか */
+const MAX_BARS = 72;
+
 export const RANGE_HOURS = [1, 3, 12, 24, 48] as const;
 export type RangeHours = (typeof RANGE_HOURS)[number];
 export const DEFAULT_RANGE: RangeHours = 3;
@@ -49,7 +59,7 @@ export function toBuckets(
   history: string,
   hours: RangeHours,
   payload: Pick<StatusPayload, 'step' | 'to'>,
-  maxBars = 72
+  maxBars = MAX_BARS
 ): Bucket[] {
   const sliced = sliceRange(history, hours, payload.step);
   const size = Math.ceil(sliced.length / maxBars);
@@ -95,6 +105,38 @@ export function uptime(history: string, hours: RangeHours, step: number): number
     if (s === 'up') up++;
   }
   return known === 0 ? null : (up / known) * 100;
+}
+
+/**
+ * 複数コンポーネントの履歴を 1 本にまとめる。
+ *
+ * カテゴリを閉じているときに出す「サービス全体」のタイムラインに使う。
+ * 各時点で overallStatus を取るので、1 つでも落ちていれば degraded 以下になり、
+ * 折りたたんだままでも異常を見落とさない。
+ */
+export function mergeHistories(histories: string[]): string {
+  const present = histories.filter((h) => h.length > 0);
+  if (present.length === 0) return '';
+
+  const length = Math.max(...present.map((h) => h.length));
+  let merged = '';
+
+  for (let i = 0; i < length; i++) {
+    // 長さが違う履歴が混ざっても末尾（最新）を揃える
+    const statuses = present.map((h) => {
+      const offset = i - (length - h.length);
+      return offset < 0 ? 'unknown' : decode(h[offset]);
+    });
+    merged += ENCODE[overallStatus(statuses)];
+  }
+
+  return merged;
+}
+
+/** 1 本のバーが表す分数。凡例の表示に使う */
+export function bucketMinutes(hours: RangeHours, step: number): number {
+  const points = Math.round((hours * 3600) / step);
+  return (Math.ceil(points / MAX_BARS) * step) / 60;
 }
 
 /** 複数サービスをまとめたときの全体ステータス */

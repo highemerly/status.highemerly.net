@@ -33,12 +33,13 @@ export function Header({
   }[theme];
 
   return (
-    <header className="flex items-center justify-between gap-4">
-      <h1 className="text-lg font-semibold tracking-tight sm:text-xl">
-        {dict.siteTitle}
-      </h1>
+    <header>
+      <div className="flex items-start justify-between gap-4">
+        <h1 className="text-lg font-semibold tracking-tight sm:text-xl">
+          {dict.siteTitle}
+        </h1>
 
-      <div className="flex items-center gap-1.5">
+        <div className="flex shrink-0 items-center gap-1.5">
         {/* 言語は 2 つだけなのでトグルにする */}
         <div
           role="group"
@@ -84,7 +85,12 @@ export function Header({
             {THEME_ICON[theme]}
           </svg>
         </button>
+        </div>
       </div>
+
+      <p className="mt-2 max-w-2xl text-sm leading-relaxed text-fg-muted">
+        {dict.siteDescription}
+      </p>
     </header>
   );
 }

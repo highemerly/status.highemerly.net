@@ -103,60 +103,36 @@
     {
       "id": "handon-web",
       "name": "Web",
-      "description": {
-        "ja": "投稿の閲覧と作成を行う Web インターフェース",
-        "en": "Web interface for reading and writing posts"
-      },
       "prometheusQuery": "probe_http_status_code{endpoint='web', env='production', service='handon'}",
       "categoryId": "handon-club"
     },
     {
       "id": "handon-streaming",
       "name": "Streaming",
-      "description": {
-        "ja": "タイムラインのリアルタイム更新",
-        "en": "Real-time timeline updates"
-      },
       "prometheusQuery": "probe_http_status_code{endpoint='streaming', env='production', service='handon'}",
       "categoryId": "handon-club"
     },
     {
       "id": "handon-media",
       "name": "Media",
-      "description": {
-        "ja": "画像・動画の配信",
-        "en": "Image and video delivery"
-      },
       "prometheusQuery": "probe_http_status_code{endpoint='media', env='production', service='handon'}",
       "categoryId": "handon-club"
     },
     {
       "id": "handon-search",
       "name": "Search",
-      "description": {
-        "ja": "投稿の全文検索",
-        "en": "Full-text search over posts"
-      },
       "prometheusQuery": "probe_http_status_code{endpoint='search', env='production', service='handon'}",
       "categoryId": "handon-club"
     },
     {
       "id": "hiyoko-web",
       "name": "Web",
-      "description": {
-        "ja": "投稿の閲覧と作成を行う Web インターフェース",
-        "en": "Web interface for reading and writing posts"
-      },
       "prometheusQuery": "probe_http_status_code{endpoint='web', env='production', service='hiyoko'}",
       "categoryId": "hiyoko-club"
     },
     {
       "id": "hiyoko-media",
       "name": "Media",
-      "description": {
-        "ja": "画像・動画の配信",
-        "en": "Image and video delivery"
-      },
       "prometheusQuery": "probe_http_status_code{endpoint='media', env='production', service='hiyoko'}",
       "categoryId": "hiyoko-club"
     },
@@ -169,40 +145,24 @@
     {
       "id": "anypost-web",
       "name": "Front",
-      "description": {
-        "ja": "投稿画面",
-        "en": "Posting interface"
-      },
       "prometheusQuery": "probe_http_status_code{endpoint='web', env='production', service='anypost'}",
       "categoryId": "anypost"
     },
     {
       "id": "anypost-api",
       "name": "Fediverse API",
-      "description": {
-        "ja": "各 SNS への投稿処理",
-        "en": "Delivery to each social network"
-      },
       "prometheusQuery": "probe_http_status_code{endpoint='api', env='production', service='anypost'}",
       "categoryId": "anypost"
     },
     {
       "id": "dominion-static",
       "name": "Front",
-      "description": {
-        "ja": "選出画面",
-        "en": "Selection interface"
-      },
       "prometheusQuery": "probe_http_status_code{endpoint='static', env='production', service='dominion'}",
       "categoryId": "dominion"
     },
     {
       "id": "dominion-api",
       "name": "Dominion API",
-      "description": {
-        "ja": "サプライの選出処理",
-        "en": "Supply randomisation"
-      },
       "prometheusQuery": "probe_http_status_code{endpoint='api', env='production', service='dominion'}",
       "categoryId": "dominion"
     },

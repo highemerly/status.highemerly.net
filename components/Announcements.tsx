@@ -1,5 +1,6 @@
 'use client';
 
+import { SectionHeading } from './SectionHeading';
 import { localized } from '@/lib/status';
 import { formatTime, type Dict } from '@/lib/i18n';
 import type { Announcement, AnnouncementLevel, Lang } from '@/lib/types';
@@ -23,9 +24,7 @@ export function Announcements({
 
   return (
     <section>
-      <h2 className="mb-2 text-xs font-medium uppercase tracking-wide text-fg-subtle">
-        {dict.announcements}
-      </h2>
+      <SectionHeading className="mb-2">{dict.announcements}</SectionHeading>
 
       <div className="space-y-2">
         {items.map((item) => {

@@ -31,7 +31,6 @@ export interface CategoryVersionSpec {
 export interface Service {
   id: string;
   name: Localized;
-  description?: Localized;
   categoryId: string;
   prometheusQuery: string | string[];
   /** レスポンスタイム用のクエリ。省略時はメトリック名から自動導出 */

@@ -7,6 +7,9 @@ export const STORAGE_KEY_THEME = 'status-page:theme';
 const dict = {
   ja: {
     siteTitle: 'サービス稼働状況',
+    siteDescription:
+      'はん（highemerly）が運営するサービス（個人が営む電気通信事業を含みます）の稼働状況一覧です。',
+    contact: 'お問い合わせ',
     allOperational: 'すべてのサービスが正常に稼働しています',
     someDegraded: '一部のサービスで問題が発生しています',
     majorOutage: 'サービスに障害が発生しています',
@@ -39,9 +42,19 @@ const dict = {
     autoReload: '5分ごとに自動更新されます',
     version: 'バージョン',
     releaseNotes: 'リリースノート',
+    currentStatus: '現在の状況',
+    servicesHeading: 'サービス',
+    legend: '凡例',
+    showDetails: '内訳を見る',
+    hideDetails: '内訳を閉じる',
+    componentCount: '{n} コンポーネント',
+    legendBar: 'バー1本は{minutes}分ぶんを表します。その間に一度でも問題があれば、悪いほうの色になります。',
   },
   en: {
     siteTitle: 'Service Status',
+    siteDescription:
+      'Operational status of services run by Han (highemerly), including telecommunications services operated as an individual.',
+    contact: 'Contact',
     allOperational: 'All services are operational',
     someDegraded: 'Some services are experiencing issues',
     majorOutage: 'Services are down',
@@ -74,6 +87,13 @@ const dict = {
     autoReload: 'Refreshes every 5 minutes',
     version: 'Version',
     releaseNotes: 'Release notes',
+    currentStatus: 'Current status',
+    servicesHeading: 'Services',
+    legend: 'Legend',
+    showDetails: 'Show breakdown',
+    hideDetails: 'Hide breakdown',
+    componentCount: '{n} components',
+    legendBar: 'Each bar covers {minutes} minutes. If anything went wrong during that window, the bar shows the worse state.',
   },
 } as const;
 

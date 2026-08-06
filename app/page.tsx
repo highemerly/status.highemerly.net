@@ -6,6 +6,8 @@ import { OverallBanner } from '@/components/OverallBanner';
 import { RangeSelector } from '@/components/RangeSelector';
 import { CategoryCard } from '@/components/CategoryCard';
 import { Announcements } from '@/components/Announcements';
+import { Legend } from '@/components/Legend';
+import { SectionHeading } from '@/components/SectionHeading';
 import { usePreferences } from '@/lib/usePreferences';
 import { getDict } from '@/lib/i18n';
 import { DEFAULT_RANGE, overallStatus, type RangeHours } from '@/lib/status';
@@ -125,42 +127,64 @@ export default function HomePage() {
 
           {status && config && (
             <>
-              <OverallBanner
-                status={overall}
-                updatedAt={status.updatedAt}
-                lang={lang}
-                dict={dict}
-              />
+              <section>
+                <SectionHeading className="mb-2">{dict.currentStatus}</SectionHeading>
+                <OverallBanner
+                  status={overall}
+                  updatedAt={status.updatedAt}
+                  lang={lang}
+                  dict={dict}
+                />
+              </section>
 
               <Announcements items={announcements} lang={lang} dict={dict} />
 
-              <div className="flex justify-end">
-                <RangeSelector value={range} onChange={setRange} dict={dict} />
-              </div>
+              <section>
+                <div className="mb-2 flex items-center justify-between gap-3">
+                  <SectionHeading>{dict.servicesHeading}</SectionHeading>
+                  <RangeSelector value={range} onChange={setRange} dict={dict} />
+                </div>
 
-              <div className="space-y-4">
-                {config.categories.map((category) => (
-                  <CategoryCard
-                    key={category.id}
-                    category={category}
-                    services={config.services.filter(
-                      (s) => s.categoryId === category.id
-                    )}
-                    payload={status}
-                    version={versions[category.id]}
-                    hours={range}
-                    lang={lang}
-                    dict={dict}
-                  />
-                ))}
-              </div>
+                <div className="space-y-3">
+                  {config.categories.map((category) => (
+                    <CategoryCard
+                      key={category.id}
+                      category={category}
+                      services={config.services.filter(
+                        (s) => s.categoryId === category.id
+                      )}
+                      payload={status}
+                      version={versions[category.id]}
+                      hours={range}
+                      lang={lang}
+                      dict={dict}
+                    />
+                  ))}
+                </div>
+              </section>
 
-              <p className="pt-2 text-center text-xs text-fg-subtle">
-                {dict.autoReload}
-              </p>
+              <Legend hours={range} step={status.step} dict={dict} />
             </>
           )}
         </div>
+
+        {/* データの取得に失敗しても連絡先には辿り着けるよう、条件の外に置く */}
+        <footer className="mt-8 space-y-2 border-t border-line pt-5 text-center text-xs text-fg-subtle">
+          <p>
+            <a
+              href="https://highemerly.net/contact.html"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1 rounded text-accent hover:underline"
+            >
+              {dict.contact}
+              <svg viewBox="0 0 16 16" width="11" height="11" fill="currentColor" aria-hidden="true">
+                <path d="M6 2h8v8h-2V5.4L5.4 12 4 10.6 10.6 4H6z" />
+              </svg>
+            </a>
+          </p>
+          <p>{dict.autoReload}</p>
+        </footer>
       </div>
     </main>
   );
