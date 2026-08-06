@@ -10,6 +10,7 @@ const dict = {
     siteDescription:
       'はん（highemerly）が運営するサービス（個人が営む電気通信事業を含みます）の稼働状況一覧です。',
     contact: 'お問い合わせ',
+    anchorLabel: 'このサービスへのリンク',
     allOperational: 'すべてのサービスが正常に稼働しています',
     someDegraded: '一部のサービスで問題が発生しています',
     majorOutage: 'サービスに障害が発生しています',
@@ -54,6 +55,7 @@ const dict = {
     siteDescription:
       'Operational status of services run by Han (highemerly), including telecommunications services operated as an individual.',
     contact: 'Contact',
+    anchorLabel: 'Link to this service',
     allOperational: 'All services are operational',
     someDegraded: 'Some services are experiencing issues',
     majorOutage: 'Services are down',

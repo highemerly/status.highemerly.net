@@ -9,24 +9,35 @@ const TONE: Record<ServiceStatus, string> = {
   unknown: 'bg-surface-raised text-fg-muted',
 };
 
+const DOT_COLOR: Record<ServiceStatus, string> = {
+  up: 'text-status-up',
+  degraded: 'text-status-degraded',
+  down: 'text-status-down',
+  unknown: 'text-status-unknown',
+};
+
 /**
  * ステータスの印。
  *
- * 同じ形をもう一枚重ねて広げながら消すことで、値が生きていることを示す。
+ * 輪が広がって消える動きと、本体のわずかな伸縮を重ねて、値が生きていることを示す。
+ * 輪はバッジの淡い背景より濃く出す。同系の薄さだと背景に埋もれて見えない。
  * 動きを減らす設定のブラウザでは globals.css 側で止まる。
  */
-export function LiveDot({ status, size = 11 }: { status: ServiceStatus; size?: number }) {
+export function LiveDot({ status, size = 12 }: { status: ServiceStatus; size?: number }) {
   return (
     <span
-      className="relative inline-flex shrink-0 items-center justify-center"
+      className={`relative inline-flex shrink-0 items-center justify-center ${DOT_COLOR[status]}`}
       style={{ width: size, height: size }}
     >
+      <span
+        className="absolute inset-0 animate-status-ping rounded-full bg-current"
+        aria-hidden="true"
+      />
       <StatusIcon
         status={status}
         size={size}
-        className="absolute inset-0 animate-status-ping"
+        className="relative animate-status-breathe"
       />
-      <StatusIcon status={status} size={size} className="relative" />
     </span>
   );
 }
@@ -45,10 +56,10 @@ export function StatusBadge({
   return (
     <span
       className={`inline-flex items-center gap-1.5 rounded-full font-medium ${TONE[status]} ${
-        large ? 'px-3 py-1 text-sm' : 'px-2 py-0.5 text-xs'
+        large ? 'px-3.5 py-1.5 text-base' : 'px-2.5 py-1 text-sm'
       }`}
     >
-      <LiveDot status={status} size={large ? 14 : 11} />
+      <LiveDot status={status} size={large ? 16 : 13} />
       {dict.status[status]}
     </span>
   );

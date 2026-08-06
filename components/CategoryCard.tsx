@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { ServiceRow } from './ServiceRow';
 import { StatusBadge } from './StatusBadge';
 import { Timeline } from './Timeline';
@@ -28,6 +28,24 @@ function ExternalIcon() {
   );
 }
 
+function LinkIcon() {
+  return (
+    <svg
+      viewBox="0 0 16 16"
+      width="13"
+      height="13"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.6"
+      strokeLinecap="round"
+      aria-hidden="true"
+    >
+      <path d="M6.5 9.5a2.8 2.8 0 0 0 4 0l2-2a2.8 2.8 0 0 0-4-4l-1 1" />
+      <path d="M9.5 6.5a2.8 2.8 0 0 0-4 0l-2 2a2.8 2.8 0 0 0 4 4l1-1" />
+    </svg>
+  );
+}
+
 export function CategoryCard({
   category,
   services,
@@ -47,6 +65,25 @@ export function CategoryCard({
 }) {
   // 一覧性を優先し、既定は閉じた状態。コンポーネント単位の内訳は開いたときだけ出す
   const [expanded, setExpanded] = useState(false);
+  const ref = useRef<HTMLElement>(null);
+
+  /*
+   * #handon-club のような指定で来たときは、そのサービスを開いた状態で見せる。
+   *
+   * データを取得してから描画するので、ブラウザ標準のハッシュ移動は
+   * 対象がまだ存在せず空振りする。マウント後に自分でスクロールさせる。
+   */
+  useEffect(() => {
+    const apply = () => {
+      if (decodeURIComponent(window.location.hash.slice(1)) !== category.id) return;
+      setExpanded(true);
+      ref.current?.scrollIntoView({ block: 'start' });
+    };
+
+    apply();
+    window.addEventListener('hashchange', apply);
+    return () => window.removeEventListener('hashchange', apply);
+  }, [category.id]);
 
   const status = overallStatus(
     services.map((s) => payload.services[s.id]?.status ?? 'unknown')
@@ -63,34 +100,50 @@ export function CategoryCard({
   const description = localized(category.description, lang);
 
   return (
-    <section className="overflow-hidden rounded-lg border border-line bg-surface">
+    <section
+      id={category.id}
+      ref={ref}
+      className="group scroll-mt-6 overflow-hidden rounded-lg border border-line bg-surface"
+    >
       <div className="px-4 py-3.5 sm:px-5">
-        <button
-          type="button"
-          onClick={() => setExpanded((open) => !open)}
-          aria-expanded={expanded}
-          className="flex w-full items-center gap-2 rounded text-left"
-        >
-          <svg
-            viewBox="0 0 16 16"
-            width="12"
-            height="12"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            aria-hidden="true"
-            className={`shrink-0 text-fg-subtle transition-transform ${
-              expanded ? 'rotate-90' : ''
-            }`}
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setExpanded((open) => !open)}
+            aria-expanded={expanded}
+            className="flex min-w-0 flex-1 items-center gap-2 rounded text-left"
           >
-            <path d="m5 3 6 5-6 5" />
-          </svg>
+            <svg
+              viewBox="0 0 16 16"
+              width="12"
+              height="12"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              aria-hidden="true"
+              className={`shrink-0 text-fg-subtle transition-transform ${
+                expanded ? 'rotate-90' : ''
+              }`}
+            >
+              <path d="m5 3 6 5-6 5" />
+            </svg>
 
-          <h3 className="min-w-0 flex-1 truncate text-base font-semibold">
-            {localized(category.name, lang)}
-          </h3>
+            <h3 className="min-w-0 truncate text-base font-semibold">
+              {localized(category.name, lang)}
+            </h3>
+          </button>
+
+          {/* このサービスだけを指す URL を作れるようにする */}
+          <a
+            href={`#${category.id}`}
+            title={dict.anchorLabel}
+            aria-label={dict.anchorLabel}
+            className="shrink-0 rounded p-1 text-fg-subtle/50 transition-colors hover:text-accent"
+          >
+            <LinkIcon />
+          </a>
 
           {/* 状態と稼働率は行を分ける。並べると数字がどちらの値か読み取りにくい */}
           <span className="flex shrink-0 flex-col items-end gap-1">
@@ -101,7 +154,7 @@ export function CategoryCard({
               </span>
             )}
           </span>
-        </button>
+        </div>
 
         {description && (
           <p className="mt-2 pl-5 text-sm leading-relaxed text-fg-muted">
@@ -126,28 +179,26 @@ export function CategoryCard({
             </a>
           )}
 
-          {/* 数字だけ置くと何の値か分からないので、必ずラベルを付ける */}
-          {version && (
-            <span className="text-xs text-fg-subtle">
-              {dict.version}:{' '}
-              {version.release ? (
-                <a
-                  href={version.release.url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  title={`${dict.releaseNotes}（${version.imageTag}）`}
-                  className="inline-flex items-center gap-1 rounded tabular-nums text-accent hover:underline"
-                >
-                  {version.version}
-                  <ExternalIcon />
-                </a>
-              ) : (
-                <span className="tabular-nums" title={version.imageTag}>
-                  {version.version}
+          {/* ラベルごとリンクにする。数字だけが青いと押せる範囲が分かりにくい */}
+          {version &&
+            (version.release ? (
+              <a
+                href={version.release.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                title={`${dict.releaseNotes}（${version.imageTag}）`}
+                className="inline-flex items-center gap-1 rounded text-xs text-accent hover:underline"
+              >
+                <span className="tabular-nums">
+                  {dict.version}: {version.version}
                 </span>
-              )}
-            </span>
-          )}
+                <ExternalIcon />
+              </a>
+            ) : (
+              <span className="text-xs tabular-nums text-fg-subtle" title={version.imageTag}>
+                {dict.version}: {version.version}
+              </span>
+            ))}
         </div>
 
         <div className="mt-3 pl-5">

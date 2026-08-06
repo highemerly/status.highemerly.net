@@ -44,15 +44,20 @@ const config: Config = {
         page: '56rem',
       },
       // ステータス表示が「今この瞬間の値」であることを伝えるための脈動。
-      // 常時動くので、目障りにならないよう遅く・薄くしてある。
+      // 広がって消える輪と、本体のわずかな伸縮を重ねる。
       keyframes: {
         'status-ping': {
-          '0%': { transform: 'scale(1)', opacity: '0.45' },
-          '70%, 100%': { transform: 'scale(2.1)', opacity: '0' },
+          '0%': { transform: 'scale(0.85)', opacity: '0.7' },
+          '75%, 100%': { transform: 'scale(2.4)', opacity: '0' },
+        },
+        'status-breathe': {
+          '0%, 100%': { transform: 'scale(1)' },
+          '50%': { transform: 'scale(1.15)' },
         },
       },
       animation: {
-        'status-ping': 'status-ping 2.5s cubic-bezier(0, 0, 0.2, 1) infinite',
+        'status-ping': 'status-ping 2s cubic-bezier(0, 0, 0.2, 1) infinite',
+        'status-breathe': 'status-breathe 2s ease-in-out infinite',
       },
     },
   },
