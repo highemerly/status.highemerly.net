@@ -16,7 +16,7 @@
  */
 
 const crypto = require('node:crypto');
-const { SSMClient, GetParameterCommand } = require('@aws-sdk/client-ssm');
+const { SSMClient, GetParametersCommand } = require('@aws-sdk/client-ssm');
 
 const REGION = process.env.AWS_REGION || 'ap-northeast-1';
 const ssmClient = new SSMClient({ region: REGION });
@@ -37,30 +37,41 @@ const SPKI_PREFIX = Buffer.from('302a300506032b6570032100', 'hex');
 // コンテナが再利用される間は SSM を引き直さない。
 // この関数は呼ばれる頻度が低くコールドスタートが主なので、
 // 温まっている間だけでも減らしておく
-let cachedPublicKey = null;
-let cachedGitHubToken = null;
+let cachedSecrets = null;
 
 exports.handler = async (event) => {
+  const startedAt = Date.now();
+
   try {
     const headers = event.headers || {};
     const signature = headers['x-signature-ed25519'] || headers['X-Signature-Ed25519'];
     const timestamp = headers['x-signature-timestamp'] || headers['X-Signature-Timestamp'];
 
     if (!signature || !timestamp) {
+      console.warn('署名ヘッダがありません:', Object.keys(headers).join(', '));
       return { statusCode: 401, body: 'missing signature' };
     }
 
     const age = Math.abs(Date.now() / 1000 - Number(timestamp));
     if (!Number.isFinite(age) || age > MAX_SIGNATURE_AGE_SECONDS) {
+      console.warn(`署名が古すぎます: ${age}s`);
       return { statusCode: 401, body: 'stale signature' };
     }
 
-    if (!(await verifySignature(event.body, signature, timestamp))) {
-      console.warn('Invalid signature');
+    // API Gateway の設定によっては本文が base64 で渡る。
+    // 署名は元のバイト列に対して付いているので、必ず戻してから検証する。
+    const body = event.isBase64Encoded
+      ? Buffer.from(event.body, 'base64').toString('utf-8')
+      : event.body;
+
+    if (!(await verifySignature(body, signature, timestamp))) {
+      console.warn('署名の検証に失敗しました');
       return { statusCode: 401, body: 'invalid signature' };
     }
 
-    const interaction = JSON.parse(event.body);
+    console.log(`[${Date.now() - startedAt}ms] 署名検証まで完了`);
+
+    const interaction = JSON.parse(body);
 
     // Discord のエンドポイント検証
     if (interaction.type === InteractionType.PING) {
@@ -105,13 +116,17 @@ async function handleAnnounce(interaction) {
     payload = {
       action: 'create',
       id: makeId(),
-      level: options.level || 'info',
-      category: options.category || '',
-      title: options.title,
-      titleEn: options.title_en || '',
-      body: options.body || '',
-      bodyEn: options.body_en || '',
-      publishedAt: new Date().toISOString(),
+      // client_payload の最上位プロパティは 10 個までという制限があるため、
+      // 中身はここにまとめる（超えると GitHub が 422 を返す）
+      announcement: {
+        level: options.level || 'info',
+        category: options.category || '',
+        title: options.title,
+        titleEn: options.title_en || '',
+        body: options.body || '',
+        bodyEn: options.body_en || '',
+        publishedAt: new Date().toISOString(),
+      },
       author,
     };
   } else if (action === 'delete') {
@@ -123,8 +138,10 @@ async function handleAnnounce(interaction) {
 
   // 結果を返信できるよう、インタラクションの識別子も渡す。
   // ワークフローが最後にこのメッセージを書き換える
-  payload.applicationId = interaction.application_id;
-  payload.interactionToken = interaction.token;
+  payload.discord = {
+    applicationId: interaction.application_id,
+    interactionToken: interaction.token,
+  };
 
   // ここを await しないと、Lambda が return した瞬間に実行環境が凍結され、
   // 送信が完了していない場合そのまま失われる（旧実装の不具合）
@@ -143,7 +160,8 @@ function makeId() {
 }
 
 async function dispatchToGitHub(payload) {
-  const token = await getGitHubToken();
+  const { githubToken: token } = await getSecrets();
+  if (!token) throw new Error(`GitHub token not found at ${GITHUB_TOKEN_PARAM}`);
 
   const response = await fetch(`https://api.github.com/repos/${GITHUB_REPO}/dispatches`, {
     method: 'POST',
@@ -177,8 +195,11 @@ async function dispatchToGitHub(payload) {
  */
 async function verifySignature(body, signature, timestamp) {
   try {
-    const publicKeyHex = await getPublicKey();
-    if (!publicKeyHex) return false;
+    const { publicKey: publicKeyHex } = await getSecrets();
+    if (!publicKeyHex) {
+      console.error(`公開鍵が取得できません: ${PUBLIC_KEY_PARAM}`);
+      return false;
+    }
 
     const key = crypto.createPublicKey({
       key: Buffer.concat([SPKI_PREFIX, Buffer.from(publicKeyHex, 'hex')]),
@@ -217,25 +238,34 @@ function message(content) {
   });
 }
 
-async function getPublicKey() {
-  if (!cachedPublicKey) cachedPublicKey = await getSSMParameter(PUBLIC_KEY_PARAM);
-  return cachedPublicKey;
-}
+/**
+ * 必要な秘密を 1 回の呼び出しでまとめて取る。
+ *
+ * 公開鍵は署名検証、トークンは GitHub 呼び出しで使う。別々に引くと
+ * SSM への往復が 2 回になる。この関数はコールドスタートが主なので、
+ * 1 往復ぶんの短縮がそのまま Discord の 3 秒制限の余裕になる。
+ */
+async function getSecrets() {
+  if (cachedSecrets) return cachedSecrets;
 
-async function getGitHubToken() {
-  if (!cachedGitHubToken) cachedGitHubToken = await getSSMParameter(GITHUB_TOKEN_PARAM);
-  if (!cachedGitHubToken) throw new Error(`GitHub token not found at ${GITHUB_TOKEN_PARAM}`);
-  return cachedGitHubToken;
-}
+  const response = await ssmClient.send(
+    new GetParametersCommand({
+      Names: [PUBLIC_KEY_PARAM, GITHUB_TOKEN_PARAM],
+      WithDecryption: true,
+    })
+  );
 
-async function getSSMParameter(name) {
-  try {
-    const response = await ssmClient.send(
-      new GetParameterCommand({ Name: name, WithDecryption: true })
-    );
-    return response.Parameter.Value;
-  } catch (error) {
-    console.error(`SSM parameter ${name}: ${error.message}`);
-    return null;
+  if (response.InvalidParameters?.length) {
+    console.error(`SSM に無いパラメータ: ${response.InvalidParameters.join(', ')}`);
   }
+
+  const byName = Object.fromEntries(
+    (response.Parameters || []).map((p) => [p.Name, p.Value])
+  );
+
+  cachedSecrets = {
+    publicKey: byName[PUBLIC_KEY_PARAM] || null,
+    githubToken: byName[GITHUB_TOKEN_PARAM] || null,
+  };
+  return cachedSecrets;
 }

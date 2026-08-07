@@ -77,10 +77,15 @@ function main() {
     fail(`action が不正です（${payload.action}）。create / delete のいずれか`);
   }
 
-  const title = oneLine(payload.title || '');
+  // repository_dispatch の client_payload は最上位プロパティが 10 個までなので、
+  // 本文まわりは announcement にまとめて送られてくる。
+  // 手で dispatch して試すときのために、平坦な形も受け付ける。
+  const input = payload.announcement || payload;
+
+  const title = oneLine(input.title || '');
   if (!title) fail('title が空です');
 
-  const level = payload.level || 'info';
+  const level = input.level || 'info';
   if (!LEVELS.includes(level)) {
     fail(`level が不正です（${level}）。${LEVELS.join(' / ')} のいずれか`);
   }
@@ -89,15 +94,15 @@ function main() {
     JSON.parse(fs.readFileSync(path.join(ROOT, 'config/services.json'), 'utf-8'))
       .categories.map((c) => c.id)
   );
-  const category = payload.category ? oneLine(payload.category, 64) : '';
+  const category = input.category ? oneLine(input.category, 64) : '';
   if (category && !categories.has(category)) {
     fail(`category "${category}" は config/services.json にありません`);
   }
 
-  const publishedAt = payload.publishedAt
-    ? new Date(payload.publishedAt)
+  const publishedAt = input.publishedAt
+    ? new Date(input.publishedAt)
     : new Date();
-  if (isNaN(publishedAt)) fail(`publishedAt が日付として読めません（${payload.publishedAt}）`);
+  if (isNaN(publishedAt)) fail(`publishedAt が日付として読めません（${input.publishedAt}）`);
 
   const lines = [
     '---',
@@ -107,13 +112,13 @@ function main() {
   lines.push(`publishedAt: ${publishedAt.toISOString()}`);
   lines.push(`title.ja: ${title}`);
 
-  const titleEn = oneLine(payload.titleEn || '');
+  const titleEn = oneLine(input.titleEn || '');
   if (titleEn) lines.push(`title.en: ${titleEn}`);
 
   lines.push('---', '');
 
-  const body = multiLine(payload.body || '');
-  const bodyEn = multiLine(payload.bodyEn || '');
+  const body = multiLine(input.body || '');
+  const bodyEn = multiLine(input.bodyEn || '');
   if (body && bodyEn) {
     lines.push('## ja', '', body, '', '## en', '', bodyEn, '');
   } else if (body) {

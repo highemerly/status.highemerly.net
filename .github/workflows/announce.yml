@@ -65,10 +65,10 @@ jobs:
       # 成否を Discord に返す。ここが無いと、失敗しても投稿者は成功したと思ってしまう。
       # インタラクショントークンは 15 分間有効な資格情報なので、必ずマスクする。
       - name: Report back to Discord
-        if: always() && github.event.client_payload.interactionToken != ''
+        if: always() && github.event.client_payload.discord.interactionToken != ''
         env:
-          APPLICATION_ID: ${{ github.event.client_payload.applicationId }}
-          INTERACTION_TOKEN: ${{ github.event.client_payload.interactionToken }}
+          APPLICATION_ID: ${{ github.event.client_payload.discord.applicationId }}
+          INTERACTION_TOKEN: ${{ github.event.client_payload.discord.interactionToken }}
           OUTCOME: ${{ job.status }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
