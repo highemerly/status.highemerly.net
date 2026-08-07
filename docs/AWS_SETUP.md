@@ -720,9 +720,52 @@ CloudFront invalidation も不要になったため、担当する処理が残�
 
 ### 5-5. スラッシュコマンドを登録し直す
 
+コマンドの定義（`/announce` の引数など）を変えたので、Discord 側に登録し直す。
+
+#### 必要な値
+
+すべて [Discord Developer Portal](https://discord.com/developers/applications) から取る。
+
+| 変数 | 何か | 取得元 |
+|---|---|---|
+| `APPLICATION_ID` | このボットのアプリケーション ID | Developer Portal → 対象アプリ → **General Information** → Application ID |
+| `BOT_TOKEN` | ボットの認証トークン | Developer Portal → 対象アプリ → **Bot** → Token の **Reset Token** |
+| `GUILD_ID` | 登録先の Discord サーバー ID | Discord アプリでサーバー名を右クリック → **サーバー ID をコピー** |
+
+> **`BOT_TOKEN` は認証情報。** これがあればボットとして何でもできる。
+> ファイルに書かない、コミットしない、貼り付け先を間違えない。
+>
+> Token は**発行時に一度しか表示されない**。控えていなければ Reset Token で
+> 作り直す（作り直すと古い Token は無効になる）。
+> なお SSM に入れてある `/status-page/discord/public-key` は
+> Bot Token とは別物で、General Information ページにある公開鍵のほう。
+
+> **サーバー ID をコピー** が右クリックメニューに出ない場合は、
+> Discord の ユーザー設定 → **詳細設定** → **開発者モード** を有効にする。
+
+#### GUILD_ID を付けるかどうか
+
+| | 反映 | 見える範囲 |
+|---|---|---|
+| `GUILD_ID` を指定 | **即時** | そのサーバーのみ |
+| `GUILD_ID` を省略 | 最大 1 時間 | ボットが入っている全サーバー |
+
+運用しているサーバーが 1 つなら `GUILD_ID` を指定するのがよい。
+すぐ反映されるので、試しながら直せる。
+
+#### 実行
+
+リポジトリのルートで実行する（`config/services.json` を読むため）。
+
 ```bash
-APPLICATION_ID=xxx BOT_TOKEN=xxx GUILD_ID=xxx ./scripts/register-discord-command.sh
+APPLICATION_ID=1234567890 BOT_TOKEN=xxxxx GUILD_ID=9876543210 \
+  ./scripts/register-discord-command.sh
 ```
+
+> **行頭に空白を 1 つ入れて実行すると、シェル履歴に残らない**（bash / zsh の既定設定）。
+> 残ってしまった場合は `history -d <番号>` などで消す。
+
+成功すると登録されたコマンド定義が表示される。
 
 ```
 /announce action:create title:メンテナンスのお知らせ body:... level:maintenance category:handon-club
@@ -730,6 +773,9 @@ APPLICATION_ID=xxx BOT_TOKEN=xxx GUILD_ID=xxx ./scripts/register-discord-command
 ```
 
 `create` すると Bot が `id` を返す。削除にはその `id` を使う。
+
+カテゴリの選択肢は `config/services.json` から生成している。
+**カテゴリを増やしたらこのスクリプトを流し直すこと。**
 
 > 旧 `/status`（ステータスの手動上書き）は**廃止**した。
 > 新構成では Prometheus の観測結果がそのまま出る。
