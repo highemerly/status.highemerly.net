@@ -650,7 +650,7 @@ Lambda → 関数 → `HandleDiscordInteractionFunction` →
     {
       "Sid": "ReadDiscordAndGitHubSecrets",
       "Effect": "Allow",
-      "Action": "ssm:GetParameter",
+      "Action": ["ssm:GetParameter", "ssm:GetParameters"],
       "Resource": [
         "arn:aws:ssm:ap-northeast-1:<ACCOUNT_ID>:parameter/status-page/discord/*",
         "arn:aws:ssm:ap-northeast-1:<ACCOUNT_ID>:parameter/status-page/github/*"
@@ -668,6 +668,17 @@ Lambda → 関数 → `HandleDiscordInteractionFunction` →
   ]
 }
 ```
+
+> **`ssm:GetParameter` と `ssm:GetParameters` は別の IAM アクション。**
+> 末尾の `s` の有無で別物として扱われ、片方だけでは
+> `not authorized to perform: ssm:GetParameters` で落ちる。
+>
+> この Lambda は公開鍵とトークンを 1 回の呼び出しでまとめて取る
+> （`GetParameters`）ので、複数形のほうが必須。上のポリシーは
+> 将来どちらの書き方に変えても動くよう、両方を許可している。
+>
+> 手順 2-1 の Lambda は 1 件ずつ取る（`GetParameter`）ので、
+> あちらは単数形だけでよい。
 
 **4. 結果の確認**
 
