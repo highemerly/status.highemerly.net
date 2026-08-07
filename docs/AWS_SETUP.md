@@ -600,12 +600,48 @@ SSM Parameter Store に登録する。
 |---|---|
 | `/status-page/github/token` | **SecureString** |
 
-### 5-2. Lambda の実行ロールを整理する
+### 5-2. Lambda の実行ロールから不要な権限を外す
 
-`HandleDiscordInteractionFunction` の実行ロールから
-**S3 と CloudFront と Lambda 呼び出しの権限をすべて削除**する。もう使わない。
+**なぜ必要か。** 旧構成では、この Lambda が
+「S3 に `messages.json` を書く」「CloudFront を invalidation する」
+「ワーカー Lambda を呼び出す」という 3 つをやっていた。
 
-残すのは次だけ。
+新構成ではそのどれもしない。GitHub に POST するだけになる。
+使わない権限を残しておくと、コードのバグや万一の乗っ取り時に
+バケットを壊せる状態が残り続けるので、外しておく。
+
+**この Lambda に必要なのは「SSM から 2 つの秘密を読む」ことだけ。**
+
+| 対象 | 用途 |
+|---|---|
+| `/status-page/discord/public-key` | Discord の署名検証 |
+| `/status-page/github/token` | GitHub への `repository_dispatch` |
+
+#### 手順
+
+**1. 実行ロールを開く**
+
+Lambda → 関数 → `HandleDiscordInteractionFunction` →
+**設定** タブ → **アクセス権限** → 「実行ロール」の下にあるロール名のリンクを押す
+（IAM のロール画面が別タブで開く）
+
+**2. 今ついているポリシーを確認する**
+
+「許可ポリシー」の一覧に、だいたい次の 2 種類が並んでいる。
+
+| 種類 | 例 | どうするか |
+|---|---|---|
+| AWS 管理ポリシー | `AWSLambdaBasicExecutionRole` | **残す**（CloudWatch Logs 用） |
+| インラインポリシー | 関数作成時に付けた名前 | **中身を下記で置き換える** |
+
+> インラインポリシーが複数ある場合や、カスタマー管理ポリシーが
+> アタッチされている場合は、S3 / CloudFront / Lambda 呼び出しを含むものを
+> すべて外し、代わりに下記のインラインポリシーを 1 つ作る。
+
+**3. インラインポリシーを置き換える**
+
+対象のインラインポリシー → **編集** → **JSON** タブ →
+中身を全部消して以下を貼る（`<ACCOUNT_ID>` は自分の値に置換）。
 
 ```json
 {
@@ -633,7 +669,23 @@ SSM Parameter Store に登録する。
 }
 ```
 
-`AWSLambdaBasicExecutionRole` は残す。
+**4. 結果の確認**
+
+ロールの「許可ポリシー」が次の 2 つだけになっていればよい。
+
+- `AWSLambdaBasicExecutionRole`（AWS 管理）
+- 上記のインラインポリシー 1 つ
+
+`s3:`、`cloudfront:`、`lambda:InvokeFunction` がどこにも残っていないこと。
+
+> **手順 2-1 で作った `status-page-update-status-role` とは別のロール。**
+> こちらは Discord 用で、Prometheus も S3 も触らない。混同しないこと。
+
+> 既存ロールを編集するのが不安なら、手順 2-1 と同じ要領で
+> 新しいロール（例: `status-page-discord-role`）を作り、
+> 上記のインラインポリシーと `AWSLambdaBasicExecutionRole` を付けて、
+> Lambda の **設定 → アクセス権限 → 編集** で実行ロールを差し替えてもよい。
+> 旧ロールは動作確認後に削除する。
 
 ### 5-3. Lambda を差し替える
 
