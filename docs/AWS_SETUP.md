@@ -63,13 +63,35 @@ IAM → ロール → **ロールを作成** → カスタム信頼ポリシー
       "Condition": {
         "StringEquals": {
           "token.actions.githubusercontent.com:aud": "sts.amazonaws.com",
-          "token.actions.githubusercontent.com:sub": "repo:highemerly/status.highemerly.net:ref:refs/heads/main"
+          "token.actions.githubusercontent.com:sub": "repo:highemerly@3039555/status.highemerly.net@1325293932:ref:refs/heads/main"
         }
       }
     }
   ]
 }
 ```
+
+> **`sub` に数値が入っているのは誤記ではない。**
+>
+> GitHub が発行する OIDC トークンの `sub` は、所有者名とリポジトリ名に
+> それぞれ**不変の数値 ID** を付けた形式になる。
+>
+> | 部分 | 値 | 意味 |
+> |---|---|---|
+> | `highemerly@3039555` | `3039555` | 所有者 ID |
+> | `status.highemerly.net@1325293932` | `1325293932` | リポジトリ ID |
+>
+> 名前だけの `repo:highemerly/status.highemerly.net:...` では**一致せず**、
+> `Not authorized to perform sts:AssumeRoleWithWebIdentity` になる。
+>
+> ID は名前を変えても変わらないため、**リポジトリをリネームしても
+> このポリシーは壊れない**（逆に、名前ベースだと他人が旧名を取得して
+> なりすませる余地があるので、ID 付きのほうが安全）。
+>
+> 値は `gh api repos/<owner>/<repo> -q .id` と
+> `gh api users/<owner> -q .id` で確認できる。
+> 実際に発行されるクレームは
+> [`debug-oidc.yml`](../.github/workflows/debug-oidc.yml) を手動実行すると見られる。
 
 > **`sub` の条件を省略したり `repo:*` にしたりしないこと。**
 > 省略すると「GitHub 上の任意のリポジトリ」がこのロールを引き受けられる状態になる。
@@ -134,12 +156,14 @@ IAM → ロール → **ロールを作成** → カスタム信頼ポリシー
   `repository_dispatch` のいずれでも同じになる:
 
   ```
-  repo:highemerly/status.highemerly.net:ref:refs/heads/main
+  repo:highemerly@3039555/status.highemerly.net@1325293932:ref:refs/heads/main
   ```
 
-  > **リポジトリをリネームしても AWS 側は追従しない。**
-  > 名前を変えたら、IAM ロールの信頼ポリシーも必ず書き換えること。
-  > IAM → ロール → 信頼関係 → 信頼ポリシーを編集。
+  > **名前だけの `repo:highemerly/status.highemerly.net:...` は一致しない。**
+  > 所有者 ID とリポジトリ ID が必要（手順 1-2 の注記を参照）。
+  >
+  > 推測で直そうとせず、[`debug-oidc.yml`](../.github/workflows/debug-oidc.yml)
+  > を手動実行して実際のクレームを見ること。生のトークンは出力しないので安全。
 
 - `No OpenIDConnect provider found` → 手順 1-1 の ID プロバイダが未登録
 - `Credentials could not be loaded` → ワークフローの
