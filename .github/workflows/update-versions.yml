@@ -18,6 +18,7 @@ concurrency:
 
 permissions:
   contents: write # config/versions.json をコミットするため
+  actions: write # Deploy を明示的に起動するため（下記の理由）
 
 jobs:
   update:
@@ -47,6 +48,7 @@ jobs:
         run: node scripts/build-versions.js
 
       - name: Commit if changed
+        id: commit
         run: |
           if git diff --quiet -- config/versions.json; then
             echo "バージョンに変更なし"
@@ -59,9 +61,20 @@ jobs:
           git commit -m "chore: サービスのバージョンを更新"
           git push
 
+          echo "changed=true" >> "$GITHUB_OUTPUT"
+
           {
             echo "### バージョンを更新しました"
             echo '```json'
             cat config/versions.json
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
+
+      # GITHUB_TOKEN による push は他のワークフローを起動しない仕様のため、
+      # 上の push だけでは Deploy が走らない。明示的に起動する。
+      # （workflow_dispatch と repository_dispatch はこの制限の例外）
+      - name: Trigger deploy
+        if: steps.commit.outputs.changed == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh workflow run deploy.yml --ref main

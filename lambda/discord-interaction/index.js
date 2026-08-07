@@ -1,196 +1,241 @@
 /**
- * HandleDiscordInteractionFunction
+ * Discord の /announce を受けて、GitHub に repository_dispatch を送る。
  *
- * Discord Slash Commandを処理してDeferred Responseを返し、ワーカーLambdaを呼び出す
+ * この関数は S3 にも CloudFront にも触らない。お知らせの正本は
+ * リポジトリの content/announcements/ で、実際にファイルを作るのは
+ * announce ワークフロー。Bot は「GitHub を叩くだけ」に徹する。
+ *
+ * 旧実装からの変更点:
+ *  - ワーカー Lambda を廃止し 1 本にした。S3 書き込みと CloudFront
+ *    invalidation が不要になったため
+ *  - 呼び出しを await するようにした。旧実装は Promise を await せずに
+ *    return しており、Lambda が実行環境を凍結して処理が消えることがあった
+ *    （「反応するときとしないときがある」の原因）
+ *  - 依存パッケージをなくした。署名検証は Node 標準の Ed25519、
+ *    HTTP は標準 fetch。zip を作らずコンソールに貼るだけで動く
  */
 
+const crypto = require('node:crypto');
 const { SSMClient, GetParameterCommand } = require('@aws-sdk/client-ssm');
-const { LambdaClient, InvokeCommand } = require('@aws-sdk/client-lambda');
-const nacl = require('tweetnacl');
 
-const ssmClient = new SSMClient({ region: process.env.AWS_REGION || 'ap-northeast-1' });
-const lambdaClient = new LambdaClient({ region: process.env.AWS_REGION || 'ap-northeast-1' });
+const REGION = process.env.AWS_REGION || 'ap-northeast-1';
+const ssmClient = new SSMClient({ region: REGION });
 
-const DISCORD_PUBLIC_KEY_PARAM = process.env.DISCORD_PUBLIC_KEY_PARAM || '/status-page/discord/public-key';
-const WORKER_LAMBDA_NAME = process.env.WORKER_LAMBDA_NAME || 'DiscordCommandWorkerFunction';
+const GITHUB_REPO = process.env.GITHUB_REPO || 'highemerly/status.highemerly.net';
+const PUBLIC_KEY_PARAM = process.env.DISCORD_PUBLIC_KEY_PARAM || '/status-page/discord/public-key';
+const GITHUB_TOKEN_PARAM = process.env.GITHUB_TOKEN_PARAM || '/status-page/github/token';
 
-// Discord Public Keyをキャッシュ
+// 署名の使い回しを防ぐ。Discord の署名対象にはタイムスタンプが含まれる
+const MAX_SIGNATURE_AGE_SECONDS = 300;
+
+const InteractionType = { PING: 1, APPLICATION_COMMAND: 2 };
+const InteractionResponseType = { PONG: 1, CHANNEL_MESSAGE_WITH_SOURCE: 4 };
+
+/** Ed25519 の生の公開鍵 32 バイトに付ける SPKI ヘッダ */
+const SPKI_PREFIX = Buffer.from('302a300506032b6570032100', 'hex');
+
+// コンテナが再利用される間は SSM を引き直さない。
+// この関数は呼ばれる頻度が低くコールドスタートが主なので、
+// 温まっている間だけでも減らしておく
 let cachedPublicKey = null;
+let cachedGitHubToken = null;
 
-// Discord Interaction Types
-const InteractionType = {
-  PING: 1,
-  APPLICATION_COMMAND: 2
-};
-
-// Discord Interaction Response Types
-const InteractionResponseType = {
-  PONG: 1,
-  CHANNEL_MESSAGE_WITH_SOURCE: 4,
-  DEFERRED_CHANNEL_MESSAGE_WITH_SOURCE: 5
-};
-
-/**
- * Lambda Handler
- */
-exports.handler = async (event, context) => {
-  const startTime = Date.now();
-
+exports.handler = async (event) => {
   try {
-    console.log('Event:', JSON.stringify(event));
-
-    // 1. Discord署名を検証
-    if (!event.headers) {
-      return {
-        statusCode: 400,
-        body: JSON.stringify({ error: 'Missing headers' })
-      };
-    }
-
-    const signature = event.headers['x-signature-ed25519'] || event.headers['X-Signature-Ed25519'];
-    const timestamp = event.headers['x-signature-timestamp'] || event.headers['X-Signature-Timestamp'];
-    const body = event.body;
+    const headers = event.headers || {};
+    const signature = headers['x-signature-ed25519'] || headers['X-Signature-Ed25519'];
+    const timestamp = headers['x-signature-timestamp'] || headers['X-Signature-Timestamp'];
 
     if (!signature || !timestamp) {
-      return {
-        statusCode: 401,
-        body: JSON.stringify({ error: 'Missing signature headers' })
-      };
+      return { statusCode: 401, body: 'missing signature' };
     }
 
-    console.log(`[${Date.now() - startTime}ms] Headers validated`);
-
-    // Public Keyをキャッシュから取得（初回のみSSMから取得）
-    if (!cachedPublicKey) {
-      console.log('Fetching public key from SSM...');
-      cachedPublicKey = await getSSMParameter(DISCORD_PUBLIC_KEY_PARAM);
-      console.log(`[${Date.now() - startTime}ms] Public key fetched`);
-      if (!cachedPublicKey) {
-        console.error('Discord public key not found in SSM');
-        return {
-          statusCode: 500,
-          body: JSON.stringify({ error: 'Configuration error' })
-        };
-      }
-    }
-    const publicKey = cachedPublicKey;
-
-    const isValid = verifyDiscordSignature(body, signature, timestamp, publicKey);
-    console.log(`[${Date.now() - startTime}ms] Signature verified`);
-    if (!isValid) {
-      console.error('Invalid Discord signature');
-      return {
-        statusCode: 401,
-        body: JSON.stringify({ error: 'Invalid signature' })
-      };
+    const age = Math.abs(Date.now() / 1000 - Number(timestamp));
+    if (!Number.isFinite(age) || age > MAX_SIGNATURE_AGE_SECONDS) {
+      return { statusCode: 401, body: 'stale signature' };
     }
 
-    // 2. リクエストボディをパース
-    const interaction = JSON.parse(body);
-    console.log(`[${Date.now() - startTime}ms] Body parsed`);
+    if (!(await verifySignature(event.body, signature, timestamp))) {
+      console.warn('Invalid signature');
+      return { statusCode: 401, body: 'invalid signature' };
+    }
 
-    // 3. PING対応（Discord検証用）
+    const interaction = JSON.parse(event.body);
+
+    // Discord のエンドポイント検証
     if (interaction.type === InteractionType.PING) {
-      return {
-        statusCode: 200,
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ type: InteractionResponseType.PONG })
-      };
+      return reply({ type: InteractionResponseType.PONG });
     }
 
-    // 4. APPLICATION_COMMAND処理
-    if (interaction.type === InteractionType.APPLICATION_COMMAND) {
-      console.log(`[${Date.now() - startTime}ms] Received command: ${interaction.data.name}`);
-
-      // ワーカーLambdaを非同期呼び出し（await しない）
-      const commandName = interaction.data.name;
-      invokeWorkerLambda(interaction, commandName)
-        .then(() => {
-          console.log(`[${Date.now() - startTime}ms] Worker Lambda invoked successfully`);
-        })
-        .catch(err => {
-          console.error(`[${Date.now() - startTime}ms] Worker Lambda invocation failed:`, err);
-        });
-
-      // 即座にDeferred Responseを返す
-      console.log(`[${Date.now() - startTime}ms] Returning deferred response`);
-
-      return {
-        statusCode: 200,
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          type: InteractionResponseType.DEFERRED_CHANNEL_MESSAGE_WITH_SOURCE
-        })
-      };
+    if (interaction.type !== InteractionType.APPLICATION_COMMAND) {
+      return { statusCode: 400, body: 'unsupported interaction' };
     }
 
-    return {
-      statusCode: 400,
-      body: JSON.stringify({ error: 'Unknown interaction type' })
-    };
+    if (interaction.data.name !== 'announce') {
+      return message(`不明なコマンドです: ${interaction.data.name}`);
+    }
 
+    return await handleAnnounce(interaction);
   } catch (error) {
     console.error('Handler error:', error);
-    return {
-      statusCode: 500,
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        error: 'Internal server error'
-      })
-    };
+    // 例外時も Discord には必ず何か返す。無言だと「応答しませんでした」になる
+    return message('エラーが発生しました。ログを確認してください。');
   }
 };
 
-/**
- * ワーカーLambdaを非同期呼び出し
- */
-async function invokeWorkerLambda(interaction, commandName) {
-  const payload = {
-    interaction,
-    commandName
-  };
+/* ------------------------------------------------------------------ *
+ * /announce
+ * ------------------------------------------------------------------ */
 
-  const command = new InvokeCommand({
-    FunctionName: WORKER_LAMBDA_NAME,
-    InvocationType: 'Event', // 非同期呼び出し
-    Payload: JSON.stringify(payload)
-  });
+async function handleAnnounce(interaction) {
+  const options = {};
+  for (const option of interaction.data.options || []) {
+    options[option.name] = option.value;
+  }
 
-  await lambdaClient.send(command);
+  const action = options.action;
+  const author =
+    interaction.member?.user?.username || interaction.user?.username || 'unknown';
+
+  let payload;
+
+  if (action === 'create') {
+    if (!options.title) return message('title は必須です。');
+
+    payload = {
+      action: 'create',
+      id: makeId(),
+      level: options.level || 'info',
+      category: options.category || '',
+      title: options.title,
+      titleEn: options.title_en || '',
+      body: options.body || '',
+      bodyEn: options.body_en || '',
+      publishedAt: new Date().toISOString(),
+      author,
+    };
+  } else if (action === 'delete') {
+    if (!options.id) return message('削除するお知らせの id を指定してください。');
+    payload = { action: 'delete', id: options.id, author };
+  } else {
+    return message(`不明なアクションです: ${action}`);
+  }
+
+  // 結果を返信できるよう、インタラクションの識別子も渡す。
+  // ワークフローが最後にこのメッセージを書き換える
+  payload.applicationId = interaction.application_id;
+  payload.interactionToken = interaction.token;
+
+  // ここを await しないと、Lambda が return した瞬間に実行環境が凍結され、
+  // 送信が完了していない場合そのまま失われる（旧実装の不具合）
+  await dispatchToGitHub(payload);
+
+  return message(
+    action === 'create'
+      ? `お知らせを送信しました。\nid: \`${payload.id}\`（削除するときに使います）`
+      : `お知らせ \`${payload.id}\` の削除を送信しました。`
+  );
 }
 
+/** ファイル名になる。英小文字・数字・ハイフンのみで構成する */
+function makeId() {
+  return new Date().toISOString().replace(/[:T]/g, '-').replace(/\..+$/, '').toLowerCase();
+}
+
+async function dispatchToGitHub(payload) {
+  const token = await getGitHubToken();
+
+  const response = await fetch(`https://api.github.com/repos/${GITHUB_REPO}/dispatches`, {
+    method: 'POST',
+    headers: {
+      Accept: 'application/vnd.github+json',
+      Authorization: `Bearer ${token}`,
+      'Content-Type': 'application/json',
+      'User-Agent': 'status-page-discord-bot',
+    },
+    body: JSON.stringify({ event_type: 'announcement', client_payload: payload }),
+    signal: AbortSignal.timeout(5000),
+  });
+
+  if (!response.ok) {
+    const detail = await response.text().catch(() => '');
+    throw new Error(`GitHub dispatch failed: ${response.status} ${detail.slice(0, 200)}`);
+  }
+
+  console.log(`Dispatched ${payload.action} ${payload.id} by ${payload.author}`);
+}
+
+/* ------------------------------------------------------------------ *
+ * 署名検証
+ * ------------------------------------------------------------------ */
+
 /**
- * Discord署名を検証
+ * Discord の Ed25519 署名を検証する。
+ *
+ * tweetnacl は使わない。Node は標準で Ed25519 を検証でき、
+ * 依存を持たなければ zip を作らずコンソールに貼るだけで済む。
  */
-function verifyDiscordSignature(body, signature, timestamp, publicKey) {
+async function verifySignature(body, signature, timestamp) {
   try {
-    const message = timestamp + body;
-    const isValid = nacl.sign.detached.verify(
-      Buffer.from(message),
-      Buffer.from(signature, 'hex'),
-      Buffer.from(publicKey, 'hex')
+    const publicKeyHex = await getPublicKey();
+    if (!publicKeyHex) return false;
+
+    const key = crypto.createPublicKey({
+      key: Buffer.concat([SPKI_PREFIX, Buffer.from(publicKeyHex, 'hex')]),
+      format: 'der',
+      type: 'spki',
+    });
+
+    return crypto.verify(
+      null,
+      Buffer.from(timestamp + body),
+      key,
+      Buffer.from(signature, 'hex')
     );
-    return isValid;
   } catch (error) {
-    console.error('Signature verification error:', error);
+    console.error('Signature verification error:', error.message);
     return false;
   }
 }
 
-/**
- * SSM Parameterを取得
- */
+/* ------------------------------------------------------------------ *
+ * 応答と設定
+ * ------------------------------------------------------------------ */
+
+function reply(payload) {
+  return {
+    statusCode: 200,
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  };
+}
+
+function message(content) {
+  return reply({
+    type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
+    data: { content },
+  });
+}
+
+async function getPublicKey() {
+  if (!cachedPublicKey) cachedPublicKey = await getSSMParameter(PUBLIC_KEY_PARAM);
+  return cachedPublicKey;
+}
+
+async function getGitHubToken() {
+  if (!cachedGitHubToken) cachedGitHubToken = await getSSMParameter(GITHUB_TOKEN_PARAM);
+  if (!cachedGitHubToken) throw new Error(`GitHub token not found at ${GITHUB_TOKEN_PARAM}`);
+  return cachedGitHubToken;
+}
+
 async function getSSMParameter(name) {
   try {
-    const command = new GetParameterCommand({
-      Name: name,
-      WithDecryption: true
-    });
-
-    const response = await ssmClient.send(command);
+    const response = await ssmClient.send(
+      new GetParameterCommand({ Name: name, WithDecryption: true })
+    );
     return response.Parameter.Value;
   } catch (error) {
-    console.error(`Failed to get SSM parameter ${name}:`, error);
+    console.error(`SSM parameter ${name}: ${error.message}`);
     return null;
   }
 }

@@ -144,6 +144,16 @@ Lambda は別途デプロイする:
 リリースノートのリンクは出さない。生成物は `config/versions.json`
 （[update-versions ワークフロー](.github/workflows/update-versions.yml)が日次でコミットする）。
 
+### content/announcements/
+
+ページ上部の「お知らせ」欄。`*.md` を置いて push すれば公開され、消せば消える。
+書き方は [content/announcements/README.md](content/announcements/README.md) を参照。
+
+Discord の `/announce` からも投稿できる。Bot は S3 を直接触らず、GitHub に
+`repository_dispatch` を送るだけで、実際にファイルを作るのは
+[announce ワークフロー](.github/workflows/announce.yml)。
+**そのため Discord 経由でも変更履歴が git に残る。**
+
 ### 機密情報
 
 AWS SSM Parameter Store で管理する。
@@ -153,6 +163,7 @@ AWS SSM Parameter Store で管理する。
 /status-page/prometheus/username    (SecureString)
 /status-page/prometheus/password    (SecureString)
 /status-page/discord/public-key     (SecureString)
+/status-page/github/token           (SecureString) お知らせ投稿用の PAT
 ```
 
 詳細は [SECURITY.md](SECURITY.md)。
@@ -174,11 +185,11 @@ AWS SSM Parameter Store で管理する。
 
 | # | 内容 | 状態 |
 |---|---|---|
-| 1 | GitHub Actions で S3 sync（OIDC） | コード完了 / AWS 側の設定待ち |
-| 2 | status.json 新スキーマ + Lambda cron 化 | コード完了 / AWS 側の設定待ち |
-| 3 | フロントエンド刷新 | 完了 |
-| 4 | お知らせ機能の置き換え（Discord → GitHub Actions） | 未着手 |
-| 5 | バージョン / リリースノート表示 | コード完了 / PAT 登録待ち |
+| 1 | GitHub Actions で S3 sync（OIDC） | **本番稼働中** |
+| 2 | status.json 新スキーマ + Lambda cron 化 | **本番稼働中** |
+| 3 | フロントエンド刷新 | **本番稼働中** |
+| 4 | お知らせ機能の置き換え（Discord → GitHub Actions） | コード完了 / Lambda 差し替え待ち |
+| 5 | バージョン / リリースノート表示 | 表示は稼働中 / PAT 登録待ち |
 
 > **以下のドキュメントは旧アーキテクチャのもので、内容が古い。**
 > 手順 4・5 の完了後に整理する。

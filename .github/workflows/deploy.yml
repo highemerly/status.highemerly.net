@@ -1,15 +1,16 @@
 name: Deploy
 
 # push で S3 に自動 sync する。
-# repository_dispatch は Discord Bot からのお知らせ投稿トリガー（案C）。
+#
+# announce / update-versions からは workflow_dispatch で呼ばれる。
+# GITHUB_TOKEN による push は他のワークフローを起動しない仕様のため、
+# それらのワークフローがコミットしても push イベントでは起動しない。
 on:
   push:
     branches: [main]
     paths-ignore:
       - 'docs/**'
       - '**.md'
-  repository_dispatch:
-    types: [announcement]
   workflow_dispatch:
 
 # 同時実行を防ぐ。後発が走ったら先発はキャンセルする

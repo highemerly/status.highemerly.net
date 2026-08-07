@@ -1,0 +1,76 @@
+name: Announce
+
+# Discord の /announce から repository_dispatch で呼ばれる。
+# content/announcements/ にファイルを作る（消す）だけで、S3 には触らない。
+# 公開は Deploy ワークフローに任せる。
+on:
+  repository_dispatch:
+    types: [announcement]
+
+# 連続で投稿されたときに取りこぼさないよう、キャンセルせず順に流す
+concurrency:
+  group: announce
+  cancel-in-progress: false
+
+permissions:
+  contents: write # content/announcements/ をコミットするため
+  actions: write # Deploy を明示的に起動するため
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      # Discord の利用者が打った任意の文字列が入る。
+      # run: に直接展開せず、必ず環境変数を経由させる。
+      - name: Apply announcement
+        env:
+          ANNOUNCEMENT_PAYLOAD: ${{ toJSON(github.event.client_payload) }}
+        run: node scripts/apply-announcement.js
+
+      # 壊れた内容が本番に出ないよう、コミット前に必ず通す
+      - name: Validate
+        run: node scripts/build-announcements.js
+
+      - name: Commit
+        id: commit
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add content/announcements
+
+          if git diff --cached --quiet; then
+            echo "内容に変化がありません"
+            exit 0
+          fi
+
+          # メッセージに使う値は git から取る。payload の文字列は混ぜない
+          FILES=$(git diff --cached --name-only | tr '\n' ' ')
+          git commit -m "chore(announce): ${FILES}"
+          git push
+          echo "changed=true" >> "$GITHUB_OUTPUT"
+
+      # GITHUB_TOKEN による push は他のワークフローを起動しないため、明示的に呼ぶ
+      - name: Trigger deploy
+        if: steps.commit.outputs.changed == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh workflow run deploy.yml --ref main
+
+      # 成否を Discord に返す。ここが無いと、失敗しても投稿者は成功したと思ってしまう。
+      # インタラクショントークンは 15 分間有効な資格情報なので、必ずマスクする。
+      - name: Report back to Discord
+        if: always() && github.event.client_payload.interactionToken != ''
+        env:
+          APPLICATION_ID: ${{ github.event.client_payload.applicationId }}
+          INTERACTION_TOKEN: ${{ github.event.client_payload.interactionToken }}
+          OUTCOME: ${{ job.status }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          echo "::add-mask::$INTERACTION_TOKEN"
+          python3 scripts/notify-discord.py || true

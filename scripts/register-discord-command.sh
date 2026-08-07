@@ -1,144 +1,133 @@
 #!/bin/bash
+#
+# Discord のスラッシュコマンドを登録する。
+#
+#   APPLICATION_ID=xxx BOT_TOKEN=xxx GUILD_ID=xxx ./scripts/register-discord-command.sh
+#
+# GUILD_ID を指定するとそのサーバー限定（即時反映）、
+# 省略するとグローバル（反映まで最大 1 時間）。
+#
+# カテゴリの選択肢は config/services.json から生成する。
+# カテゴリを増やしたらこのスクリプトを流し直すこと。
 
-# Discord Slash Commandを登録するスクリプト
+set -euo pipefail
 
-set -e
+for required in APPLICATION_ID BOT_TOKEN; do
+  if [ -z "${!required:-}" ]; then
+    echo "Error: $required が設定されていません" >&2
+    exit 1
+  fi
+done
 
-# 環境変数の確認
-if [ -z "$APPLICATION_ID" ]; then
-  echo "Error: APPLICATION_ID environment variable is not set"
-  echo "Usage: APPLICATION_ID=xxx BOT_TOKEN=xxx GUILD_ID=xxx ./scripts/register-discord-command.sh"
+if ! command -v jq >/dev/null 2>&1; then
+  echo "Error: jq が必要です（brew install jq）" >&2
   exit 1
 fi
 
-if [ -z "$BOT_TOKEN" ]; then
-  echo "Error: BOT_TOKEN environment variable is not set"
-  echo "Usage: APPLICATION_ID=xxx BOT_TOKEN=xxx GUILD_ID=xxx ./scripts/register-discord-command.sh"
+if [ ! -f config/services.json ]; then
+  echo "Error: config/services.json が見つかりません（リポジトリのルートで実行してください）" >&2
   exit 1
 fi
 
-# GUILD_IDが指定されていればギルド固有コマンド、なければグローバルコマンド
-if [ -n "$GUILD_ID" ]; then
+if [ -n "${GUILD_ID:-}" ]; then
   ENDPOINT="https://discord.com/api/v10/applications/${APPLICATION_ID}/guilds/${GUILD_ID}/commands"
-  echo "Registering guild-specific command for guild ${GUILD_ID}..."
+  echo "サーバー ${GUILD_ID} 限定で登録します"
 else
   ENDPOINT="https://discord.com/api/v10/applications/${APPLICATION_ID}/commands"
-  echo "Registering global command (may take up to 1 hour to propagate)..."
+  echo "グローバルに登録します（反映まで最大 1 時間）"
 fi
 
-# config/services.jsonからカテゴリを読み込んで選択肢を生成
-if [ ! -f "config/services.json" ]; then
-  echo "Error: config/services.json not found"
-  exit 1
-fi
+# name は日本語表示にしたい。多言語オブジェクトなら ja、文字列ならそのまま。
+# .name.ja // .name は name が文字列のとき「文字列を文字列で索引できない」で落ちる
+CATEGORY_CHOICES=$(jq -c '
+  [.categories[] | {
+    name: (if (.name | type) == "object" then (.name.ja // .name.en) else .name end),
+    value: .id
+  }]
+' config/services.json)
 
-# jqがインストールされているか確認
-if ! command -v jq &> /dev/null; then
-  echo "Error: jq is not installed. Please install jq to use this script."
-  echo "  macOS: brew install jq"
-  echo "  Ubuntu/Debian: apt-get install jq"
-  exit 1
-fi
+COMMAND=$(jq -n --argjson categories "$CATEGORY_CHOICES" '{
+  name: "announce",
+  description: "ステータスページのお知らせを追加・削除する",
+  options: [
+    {
+      name: "action",
+      description: "追加するか削除するか",
+      type: 3,
+      required: true,
+      choices: [
+        {name: "create（追加）", value: "create"},
+        {name: "delete（削除）", value: "delete"}
+      ]
+    },
+    {
+      name: "title",
+      description: "見出し（create のとき必須）",
+      type: 3,
+      required: false
+    },
+    {
+      name: "body",
+      description: "本文",
+      type: 3,
+      required: false
+    },
+    {
+      name: "level",
+      description: "種別（既定: info）",
+      type: 3,
+      required: false,
+      choices: [
+        {name: "info（お知らせ）", value: "info"},
+        {name: "maintenance（メンテナンス）", value: "maintenance"},
+        {name: "incident（障害）", value: "incident"}
+      ]
+    },
+    {
+      name: "category",
+      description: "関連するサービス",
+      type: 3,
+      required: false,
+      choices: $categories
+    },
+    {
+      name: "title_en",
+      description: "見出し（英語）",
+      type: 3,
+      required: false
+    },
+    {
+      name: "body_en",
+      description: "本文（英語）",
+      type: 3,
+      required: false
+    },
+    {
+      name: "id",
+      description: "削除するお知らせの id（delete のとき必須）",
+      type: 3,
+      required: false
+    }
+  ]
+}')
 
-# カテゴリの選択肢をjqで生成
-CHOICES=$(jq -c '[.categories[] | {name: .name, value: .id}]' config/services.json)
-
-echo ""
-echo "=== Registering /announce command ==="
-# /announce コマンドを登録
-RESPONSE=$(curl -s -X POST "$ENDPOINT" \
+RESPONSE=$(curl -sS -X POST "$ENDPOINT" \
   -H "Authorization: Bot ${BOT_TOKEN}" \
   -H "Content-Type: application/json" \
-  -d "{
-    \"name\": \"announce\",
-    \"description\": \"ステータスページにメッセージを追加/削除\",
-    \"options\": [
-      {
-        \"name\": \"category\",
-        \"description\": \"カテゴリを選択\",
-        \"type\": 3,
-        \"required\": true,
-        \"choices\": ${CHOICES}
-      },
-      {
-        \"name\": \"action\",
-        \"description\": \"アクション (create/delete)\",
-        \"type\": 3,
-        \"required\": true,
-        \"choices\": [
-          {\"name\": \"create\", \"value\": \"create\"},
-          {\"name\": \"delete\", \"value\": \"delete\"}
-        ]
-      },
-      {
-        \"name\": \"message\",
-        \"description\": \"メッセージ内容 (createの場合のみ)\",
-        \"type\": 3,
-        \"required\": false
-      }
-    ]
-  }")
+  -d "$COMMAND")
 
-# レスポンスを確認
-if echo "$RESPONSE" | jq -e '.id' > /dev/null 2>&1; then
-  echo "✅ /announce command registered successfully!"
-  echo "$RESPONSE" | jq '.'
+if echo "$RESPONSE" | jq -e '.id' >/dev/null 2>&1; then
+  echo "/announce を登録しました"
+  echo "$RESPONSE" | jq '{id, name, description, options: [.options[].name]}'
 else
-  echo "❌ Failed to register /announce command"
-  echo "$RESPONSE" | jq '.'
+  echo "/announce の登録に失敗しました" >&2
+  echo "$RESPONSE" | jq '.' >&2
   exit 1
 fi
 
-echo ""
-echo "=== Registering /status command ==="
-# /status コマンドを登録
-RESPONSE=$(curl -s -X POST "$ENDPOINT" \
-  -H "Authorization: Bot ${BOT_TOKEN}" \
-  -H "Content-Type: application/json" \
-  -d "{
-    \"name\": \"status\",
-    \"description\": \"カテゴリのステータスを強制的に変更\",
-    \"options\": [
-      {
-        \"name\": \"category\",
-        \"description\": \"カテゴリを選択\",
-        \"type\": 3,
-        \"required\": true,
-        \"choices\": ${CHOICES}
-      },
-      {
-        \"name\": \"action\",
-        \"description\": \"アクション (override/clear)\",
-        \"type\": 3,
-        \"required\": true,
-        \"choices\": [
-          {\"name\": \"override\", \"value\": \"override\"},
-          {\"name\": \"clear\", \"value\": \"clear\"}
-        ]
-      },
-      {
-        \"name\": \"status\",
-        \"description\": \"オーバーライドするステータス (overrideの場合のみ)\",
-        \"type\": 3,
-        \"required\": false,
-        \"choices\": [
-          {\"name\": \"operational\", \"value\": \"operational\"},
-          {\"name\": \"degraded\", \"value\": \"degraded\"},
-          {\"name\": \"down\", \"value\": \"down\"}
-        ]
-      }
-    ]
-  }")
+cat <<'NOTE'
 
-# レスポンスを確認
-if echo "$RESPONSE" | jq -e '.id' > /dev/null 2>&1; then
-  echo "✅ /status command registered successfully!"
-  echo "$RESPONSE" | jq '.'
-else
-  echo "❌ Failed to register /status command"
-  echo "$RESPONSE" | jq '.'
-  exit 1
-fi
-
-echo ""
-echo "✅ All commands registered successfully!"
+旧 /status コマンドは廃止した。
+ステータスの手動上書きは新構成では未実装で、Prometheus の観測結果がそのまま出る。
+不要なコマンドが残っている場合は ./scripts/delete-discord-commands.sh で消せる。
+NOTE

@@ -81,23 +81,6 @@ const status = {
   services,
 };
 
-const announcements = {
-  announcements: [
-    {
-      id: 'sample-1',
-      level: 'maintenance',
-      title: {
-        ja: 'データベースのメンテナンスを行います',
-        en: 'Scheduled database maintenance',
-      },
-      body: {
-        ja: '8月10日 02:00 から 03:00 まで、投稿の閲覧ができなくなります。',
-        en: 'Posts will be unavailable from 02:00 to 03:00 on 10 August.',
-      },
-      publishedAt: new Date(endSec * 1000 - 3600 * 1000).toISOString(),
-    },
-  ],
-};
 
 function write(relative, data) {
   const target = path.join(ROOT, relative);
@@ -108,7 +91,6 @@ function write(relative, data) {
 }
 
 write('public/data/status.v1.json', status);
-write('public/content/announcements.json', announcements);
 write('public/config/services.json', config);
 
 // バージョンは scripts/build-versions.js が作る。まだ無ければ飛ばす

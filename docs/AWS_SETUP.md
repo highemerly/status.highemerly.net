@@ -564,14 +564,140 @@ Contents: Read and write 権限を持つ PAT が別途必要になる。
 
 ---
 
-## 5. Discord Bot → GitHub Actions（案C）
+## 5. Discord からお知らせを投稿できるようにする
 
-> 手順 5 は「お知らせ機能の置き換え」の段階で実施する。ここは予定。
+Bot は **S3 にも CloudFront にも触らない**。GitHub に `repository_dispatch` を
+送るだけで、実際にファイルを作るのは
+[`announce.yml`](../.github/workflows/announce.yml)。
 
-Bot は S3 にも CloudFront にも触らない。GitHub に `repository_dispatch` を送るだけ。
+```
+[Discord /announce]
+      │ repository_dispatch
+      ▼
+[announce ワークフロー] content/announcements/<id>.md を作成/削除してコミット
+      │ workflow_dispatch
+      ▼
+[Deploy ワークフロー] ──> S3 ──> 反映（1〜2 分）
+      │
+      └─ 結果を Discord のメッセージに書き戻す
+```
 
-- GitHub で fine-grained PAT を発行（対象リポジトリのみ / Contents: Read and write）
-- SSM Parameter Store に `SecureString` で保存: `/status-page/github/token`
-- `DiscordCommandWorkerFunction` は**廃止**（S3 書き込みも invalidation も不要になるため）
-- `HandleDiscordInteractionFunction` の実行ロールから S3 / CloudFront 権限を削除し、
-  `ssm:GetParameter` on `/status-page/github/*` を追加
+お知らせの正本はリポジトリなので、**Discord 経由でも変更履歴が git に残る**。
+Bot が壊れていても GitHub の Web UI から投稿できる。
+
+### 5-1. GitHub の PAT を発行して SSM に置く
+
+GitHub → Settings → Developer settings → **Fine-grained personal access tokens**
+
+| 項目 | 値 |
+|---|---|
+| Repository access | Only select repositories → `highemerly/status.highemerly.net` |
+| Repository permissions | **Contents: Read and write**（`repository_dispatch` に必要） |
+
+SSM Parameter Store に登録する。
+
+| 名前 | 種類 |
+|---|---|
+| `/status-page/github/token` | **SecureString** |
+
+### 5-2. Lambda の実行ロールを整理する
+
+`HandleDiscordInteractionFunction` の実行ロールから
+**S3 と CloudFront と Lambda 呼び出しの権限をすべて削除**する。もう使わない。
+
+残すのは次だけ。
+
+```json
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "ReadDiscordAndGitHubSecrets",
+      "Effect": "Allow",
+      "Action": "ssm:GetParameter",
+      "Resource": [
+        "arn:aws:ssm:ap-northeast-1:<ACCOUNT_ID>:parameter/status-page/discord/*",
+        "arn:aws:ssm:ap-northeast-1:<ACCOUNT_ID>:parameter/status-page/github/*"
+      ]
+    },
+    {
+      "Sid": "DecryptSecureString",
+      "Effect": "Allow",
+      "Action": "kms:Decrypt",
+      "Resource": "*",
+      "Condition": {
+        "StringEquals": { "kms:ViaService": "ssm.ap-northeast-1.amazonaws.com" }
+      }
+    }
+  ]
+}
+```
+
+`AWSLambdaBasicExecutionRole` は残す。
+
+### 5-3. Lambda を差し替える
+
+`HandleDiscordInteractionFunction` を開く。
+
+**この関数も外部ライブラリを使わない。** 署名検証は Node 標準の Ed25519、
+HTTP は標準 `fetch`。zip を作らずコンソールに貼るだけでよい。
+
+1. ランタイムを **Node.js 24.x** に変更
+2. `index.mjs` を `index.js` にリネームし、
+   [`lambda/discord-interaction/index.js`](../lambda/discord-interaction/index.js) を貼り付け
+3. 環境変数
+
+   | キー | 値 |
+   |---|---|
+   | `GITHUB_REPO` | `highemerly/status.highemerly.net` |
+
+4. タイムアウトを **10 秒**に（既定の 3 秒だと GitHub への往復で足りないことがある）
+
+> **Discord の 3 秒制限について**
+> この関数は受け付けた時点で即座に応答を返し、実処理は GitHub Actions に任せる。
+> 応答までにやるのは署名検証と GitHub への POST 1 回だけなので、
+> コールドスタートを含めても収まる。
+> 実際の公開結果は、ワークフローが同じメッセージを書き換えて知らせる。
+
+### 5-4. 旧ワーカーを削除する
+
+`DiscordCommandWorkerFunction` を**削除**する。S3 書き込みも
+CloudFront invalidation も不要になったため、担当する処理が残っていない。
+
+`data/messages.json` も使わなくなるので削除してよい。
+
+### 5-5. スラッシュコマンドを登録し直す
+
+```bash
+APPLICATION_ID=xxx BOT_TOKEN=xxx GUILD_ID=xxx ./scripts/register-discord-command.sh
+```
+
+```
+/announce action:create title:メンテナンスのお知らせ body:... level:maintenance category:handon-club
+/announce action:delete id:2026-08-07-08-54-52
+```
+
+`create` すると Bot が `id` を返す。削除にはその `id` を使う。
+
+> 旧 `/status`（ステータスの手動上書き）は**廃止**した。
+> 新構成では Prometheus の観測結果がそのまま出る。
+> 不要なコマンドは `./scripts/delete-discord-commands.sh` で消せる。
+
+### 5-6. 動作確認
+
+1. Discord で `/announce action:create title:テスト` を実行
+2. 即座に「お知らせを送信しました。id: ...」が返る
+3. Actions タブで **Announce** → **Deploy** が続けて走る
+4. 1〜2 分後にサイト上部にお知らせが出る
+5. Discord のメッセージが「✅ 受け付けました」に書き換わる
+6. `/announce action:delete id:<返ってきた id>` で消えることを確認
+
+反応がない場合は CloudWatch Logs を見る。よくある失敗:
+
+| ログ | 原因 |
+|---|---|
+| `GitHub dispatch failed: 404` | PAT の対象リポジトリ違い、または Contents 権限不足 |
+| `GitHub dispatch failed: 401` | PAT の期限切れ |
+| `GitHub token not found` | SSM に `/status-page/github/token` が無い |
+| `invalid signature` | `/status-page/discord/public-key` が違う |
+| `Task timed out` | タイムアウトが 3 秒のまま。10 秒に上げる |
