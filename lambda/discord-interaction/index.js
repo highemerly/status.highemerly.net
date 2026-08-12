@@ -1,32 +1,39 @@
 /**
- * Discord の /announce を受けて、GitHub に repository_dispatch を送る。
+ * Discord の /announce を受けて、S3 の data/announcements.json を更新する。
  *
- * この関数は S3 にも CloudFront にも触らない。お知らせの正本は
- * リポジトリの content/announcements/ で、実際にファイルを作るのは
- * announce ワークフロー。Bot は「GitHub を叩くだけ」に徹する。
+ * 当初は GitHub の repository_dispatch を経由してリポジトリにファイルを
+ * 作らせていたが、経路が長いわりに得るものが少なかったのでやめた。
+ * その構成の動機は「Bot が S3 に書くと CloudFront のキャッシュが消えない」
+ * という旧実装の問題だったが、それは s-maxage を短くした時点で解決している。
+ *
+ * data/ は Lambda が書く領域で、GitHub Actions 側は IAM で書き込みを
+ * 拒否してある。お知らせもここに置くことで、書き手が 1 つに定まる。
  *
  * 旧実装からの変更点:
- *  - ワーカー Lambda を廃止し 1 本にした。S3 書き込みと CloudFront
- *    invalidation が不要になったため
- *  - 呼び出しを await するようにした。旧実装は Promise を await せずに
- *    return しており、Lambda が実行環境を凍結して処理が消えることがあった
- *    （「反応するときとしないときがある」の原因）
- *  - 依存パッケージをなくした。署名検証は Node 標準の Ed25519、
- *    HTTP は標準 fetch。zip を作らずコンソールに貼るだけで動く
+ *  - ワーカー Lambda を廃止し 1 本にした
+ *  - CloudFront invalidation をやめた。s-maxage=60 で 1 分以内に反映される
+ *  - 依存パッケージをなくした。署名検証は Node 標準の Ed25519 を使う
  */
 
 const crypto = require('node:crypto');
-const { SSMClient, GetParametersCommand } = require('@aws-sdk/client-ssm');
+const { S3Client, GetObjectCommand, PutObjectCommand } = require('@aws-sdk/client-s3');
+const { SSMClient, GetParameterCommand } = require('@aws-sdk/client-ssm');
 
 const REGION = process.env.AWS_REGION || 'ap-northeast-1';
+const s3Client = new S3Client({ region: REGION });
 const ssmClient = new SSMClient({ region: REGION });
 
-const GITHUB_REPO = process.env.GITHUB_REPO || 'highemerly/status.highemerly.net';
+const S3_BUCKET = process.env.S3_BUCKET || 'status-highemerly-net';
+const ANNOUNCEMENTS_KEY = process.env.ANNOUNCEMENTS_KEY || 'data/announcements.json';
 const PUBLIC_KEY_PARAM = process.env.DISCORD_PUBLIC_KEY_PARAM || '/status-page/discord/public-key';
-const GITHUB_TOKEN_PARAM = process.env.GITHUB_TOKEN_PARAM || '/status-page/github/token';
+
+// 溜め込むと配信サイズが増えるだけなので上限を設ける
+const MAX_ANNOUNCEMENTS = 20;
 
 // 署名の使い回しを防ぐ。Discord の署名対象にはタイムスタンプが含まれる
 const MAX_SIGNATURE_AGE_SECONDS = 300;
+
+const LEVELS = ['info', 'maintenance', 'incident'];
 
 const InteractionType = { PING: 1, APPLICATION_COMMAND: 2 };
 const InteractionResponseType = { PONG: 1, CHANNEL_MESSAGE_WITH_SOURCE: 4 };
@@ -34,10 +41,7 @@ const InteractionResponseType = { PONG: 1, CHANNEL_MESSAGE_WITH_SOURCE: 4 };
 /** Ed25519 の生の公開鍵 32 バイトに付ける SPKI ヘッダ */
 const SPKI_PREFIX = Buffer.from('302a300506032b6570032100', 'hex');
 
-// コンテナが再利用される間は SSM を引き直さない。
-// この関数は呼ばれる頻度が低くコールドスタートが主なので、
-// 温まっている間だけでも減らしておく
-let cachedSecrets = null;
+let cachedPublicKey = null;
 
 exports.handler = async (event) => {
   const startedAt = Date.now();
@@ -86,11 +90,13 @@ exports.handler = async (event) => {
       return message(`不明なコマンドです: ${interaction.data.name}`);
     }
 
-    return await handleAnnounce(interaction);
+    const result = await handleAnnounce(interaction);
+    console.log(`[${Date.now() - startedAt}ms] 完了`);
+    return result;
   } catch (error) {
     console.error('Handler error:', error);
     // 例外時も Discord には必ず何か返す。無言だと「応答しませんでした」になる
-    return message('エラーが発生しました。ログを確認してください。');
+    return message(`エラーが発生しました: ${error.message}`);
   }
 };
 
@@ -104,83 +110,129 @@ async function handleAnnounce(interaction) {
     options[option.name] = option.value;
   }
 
-  const action = options.action;
   const author =
     interaction.member?.user?.username || interaction.user?.username || 'unknown';
 
-  let payload;
+  const current = await loadAnnouncements();
 
-  if (action === 'create') {
-    if (!options.title) return message('title は必須です。');
-
-    payload = {
-      action: 'create',
-      id: makeId(),
-      // client_payload の最上位プロパティは 10 個までという制限があるため、
-      // 中身はここにまとめる（超えると GitHub が 422 を返す）
-      announcement: {
-        level: options.level || 'info',
-        category: options.category || '',
-        title: options.title,
-        titleEn: options.title_en || '',
-        body: options.body || '',
-        bodyEn: options.body_en || '',
-        publishedAt: new Date().toISOString(),
-      },
-      author,
-    };
-  } else if (action === 'delete') {
+  if (options.action === 'delete') {
     if (!options.id) return message('削除するお知らせの id を指定してください。');
-    payload = { action: 'delete', id: options.id, author };
-  } else {
-    return message(`不明なアクションです: ${action}`);
+
+    const remaining = current.filter((item) => item.id !== options.id);
+    if (remaining.length === current.length) {
+      const ids = current.map((item) => `\`${item.id}\``).join(', ') || 'なし';
+      return message(`\`${options.id}\` は見つかりませんでした。\n現在のお知らせ: ${ids}`);
+    }
+
+    await saveAnnouncements(remaining);
+    console.log(`削除: ${options.id} by ${author}`);
+    return message(`お知らせを削除しました。1 分以内に反映されます。\nhttps://status.highemerly.net/`);
   }
 
-  // 結果を返信できるよう、インタラクションの識別子も渡す。
-  // ワークフローが最後にこのメッセージを書き換える
-  payload.discord = {
-    applicationId: interaction.application_id,
-    interactionToken: interaction.token,
+  if (options.action !== 'create') {
+    return message(`不明なアクションです: ${options.action}`);
+  }
+
+  const title = oneLine(options.title || '');
+  if (!title) return message('title は必須です。');
+
+  const level = options.level || 'info';
+  // Discord 側でも選択肢に限定しているが、念のため
+  if (!LEVELS.includes(level)) return message(`level が不正です: ${level}`);
+
+  const entry = {
+    id: makeId(),
+    level,
+    title: { ja: title },
+    publishedAt: new Date().toISOString(),
   };
 
-  // ここを await しないと、Lambda が return した瞬間に実行環境が凍結され、
-  // 送信が完了していない場合そのまま失われる（旧実装の不具合）
-  await dispatchToGitHub(payload);
+  const titleEn = oneLine(options.title_en || '');
+  if (titleEn) entry.title.en = titleEn;
 
+  const body = multiLine(options.body || '');
+  const bodyEn = multiLine(options.body_en || '');
+  if (body || bodyEn) {
+    entry.body = {};
+    if (body) entry.body.ja = body;
+    if (bodyEn) entry.body.en = bodyEn;
+  }
+
+  if (options.category) entry.categoryId = options.category;
+
+  // 新しいものが上。件数の上限で古いものから落とす
+  const next = [entry, ...current].slice(0, MAX_ANNOUNCEMENTS);
+  await saveAnnouncements(next);
+
+  console.log(`追加: ${entry.id} by ${author}`);
   return message(
-    action === 'create'
-      ? `お知らせを送信しました。\nid: \`${payload.id}\`（削除するときに使います）`
-      : `お知らせ \`${payload.id}\` の削除を送信しました。`
+    `お知らせを公開しました。1 分以内に反映されます。\n` +
+    `id: \`${entry.id}\`（削除するときに使います）\n` +
+    `https://status.highemerly.net/`
   );
 }
 
-/** ファイル名になる。英小文字・数字・ハイフンのみで構成する */
+/** 一覧の識別子。英小文字・数字・ハイフンのみで構成する */
 function makeId() {
   return new Date().toISOString().replace(/[:T]/g, '-').replace(/\..+$/, '').toLowerCase();
 }
 
-async function dispatchToGitHub(payload) {
-  const { githubToken: token } = await getSecrets();
-  if (!token) throw new Error(`GitHub token not found at ${GITHUB_TOKEN_PARAM}`);
+/* ------------------------------------------------------------------ *
+ * S3
+ * ------------------------------------------------------------------ */
 
-  const response = await fetch(`https://api.github.com/repos/${GITHUB_REPO}/dispatches`, {
-    method: 'POST',
-    headers: {
-      Accept: 'application/vnd.github+json',
-      Authorization: `Bearer ${token}`,
-      'Content-Type': 'application/json',
-      'User-Agent': 'status-page-discord-bot',
-    },
-    body: JSON.stringify({ event_type: 'announcement', client_payload: payload }),
-    signal: AbortSignal.timeout(5000),
-  });
-
-  if (!response.ok) {
-    const detail = await response.text().catch(() => '');
-    throw new Error(`GitHub dispatch failed: ${response.status} ${detail.slice(0, 200)}`);
+/**
+ * 現在のお知らせを読む。
+ *
+ * 読んで書き戻すので、同時に 2 つのコマンドが走ると後勝ちになる。
+ * 運用者 1 人・月に数回という頻度なので、条件付き書き込みまでは入れていない。
+ */
+async function loadAnnouncements() {
+  try {
+    const response = await s3Client.send(
+      new GetObjectCommand({ Bucket: S3_BUCKET, Key: ANNOUNCEMENTS_KEY })
+    );
+    const parsed = JSON.parse(await response.Body.transformToString());
+    return Array.isArray(parsed.announcements) ? parsed.announcements : [];
+  } catch (error) {
+    if (error.name === 'NoSuchKey' || error.name === 'NotFound') return [];
+    throw error;
   }
+}
 
-  console.log(`Dispatched ${payload.action} ${payload.id} by ${payload.author}`);
+async function saveAnnouncements(announcements) {
+  await s3Client.send(
+    new PutObjectCommand({
+      Bucket: S3_BUCKET,
+      Key: ANNOUNCEMENTS_KEY,
+      Body: JSON.stringify({ announcements }),
+      ContentType: 'application/json',
+      // invalidation は使わない。60 秒で入れ替わる
+      CacheControl: 'public, max-age=60, s-maxage=60',
+    })
+  );
+}
+
+/* ------------------------------------------------------------------ *
+ * 入力の整形
+ * ------------------------------------------------------------------ */
+
+/** 見出しは 1 行。改行と制御文字を潰す */
+function oneLine(value, limit = 200) {
+  return String(value)
+    .replace(/[\r\n\t]+/g, ' ')
+    .replace(/[\u0000-\u001F\u007F]/g, '')
+    .trim()
+    .slice(0, limit);
+}
+
+/** 本文は改行だけ残し、それ以外の制御文字は落とす */
+function multiLine(value, limit = 2000) {
+  return String(value)
+    .replace(/\r\n/g, '\n')
+    .replace(/[\u0000-\u0009\u000B-\u001F\u007F]/g, '')
+    .trim()
+    .slice(0, limit);
 }
 
 /* ------------------------------------------------------------------ *
@@ -195,7 +247,7 @@ async function dispatchToGitHub(payload) {
  */
 async function verifySignature(body, signature, timestamp) {
   try {
-    const { publicKey: publicKeyHex } = await getSecrets();
+    const publicKeyHex = await getPublicKey();
     if (!publicKeyHex) {
       console.error(`公開鍵が取得できません: ${PUBLIC_KEY_PARAM}`);
       return false;
@@ -219,8 +271,18 @@ async function verifySignature(body, signature, timestamp) {
   }
 }
 
+async function getPublicKey() {
+  if (cachedPublicKey) return cachedPublicKey;
+
+  const response = await ssmClient.send(
+    new GetParameterCommand({ Name: PUBLIC_KEY_PARAM, WithDecryption: true })
+  );
+  cachedPublicKey = response.Parameter.Value;
+  return cachedPublicKey;
+}
+
 /* ------------------------------------------------------------------ *
- * 応答と設定
+ * 応答
  * ------------------------------------------------------------------ */
 
 function reply(payload) {
@@ -236,36 +298,4 @@ function message(content) {
     type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
     data: { content },
   });
-}
-
-/**
- * 必要な秘密を 1 回の呼び出しでまとめて取る。
- *
- * 公開鍵は署名検証、トークンは GitHub 呼び出しで使う。別々に引くと
- * SSM への往復が 2 回になる。この関数はコールドスタートが主なので、
- * 1 往復ぶんの短縮がそのまま Discord の 3 秒制限の余裕になる。
- */
-async function getSecrets() {
-  if (cachedSecrets) return cachedSecrets;
-
-  const response = await ssmClient.send(
-    new GetParametersCommand({
-      Names: [PUBLIC_KEY_PARAM, GITHUB_TOKEN_PARAM],
-      WithDecryption: true,
-    })
-  );
-
-  if (response.InvalidParameters?.length) {
-    console.error(`SSM に無いパラメータ: ${response.InvalidParameters.join(', ')}`);
-  }
-
-  const byName = Object.fromEntries(
-    (response.Parameters || []).map((p) => [p.Name, p.Value])
-  );
-
-  cachedSecrets = {
-    publicKey: byName[PUBLIC_KEY_PARAM] || null,
-    githubToken: byName[GITHUB_TOKEN_PARAM] || null,
-  };
-  return cachedSecrets;
 }

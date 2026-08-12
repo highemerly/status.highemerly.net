@@ -1,12 +1,13 @@
 {
   "name": "discord-interaction-function",
   "version": "1.0.0",
-  "description": "Discord の /announce を受けて GitHub に repository_dispatch を送る",
+  "description": "Discord の /announce を受けて S3 の data/announcements.json を更新する",
   "main": "index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.504.0",
     "@aws-sdk/client-ssm": "^3.504.0"
   }
 }

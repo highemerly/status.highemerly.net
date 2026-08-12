@@ -252,40 +252,57 @@ EventBridge のスケジュールルールも、S3 の PUT（8,640 回 ≒ $0.04
 
 ---
 
-## 5. お知らせ機能 【決定: 案C】
+## 5. お知らせ機能 【実装済み・当初案から変更】
 
-お知らせの**正**は Git リポジトリの `content/announcements/*.md` に置く。
-Discord Bot は「投稿手段のひとつ」に降格させ、S3 を直接書かせない。
+### 当初の判断とその見直し
+
+当初は案C（Discord → `repository_dispatch` → GitHub Actions → S3）を選んだ。
+動機は「Bot が S3 に直接書くと CloudFront のキャッシュが消えない」という
+旧実装の問題を避けることだった。
+
+**しかしその問題は、手順 3 で `s-maxage` を短くした時点で構成全体から消えていた。**
+invalidation はもうどこでも使っていない。案C は、すでに存在しない問題を
+避けるために遠回りする構成になっていた。
+
+実装して動かしてから比較した結果:
+
+| | 直接 S3（採用） | GitHub 経由（当初案） |
+|---|---|---|
+| 反映まで | 約 1 分 | 約 2 分 |
+| 部品 | Lambda → S3 | Lambda → GitHub API → Announce → Deploy → S3 |
+| PAT | 不要 | 必要（SSM 管理・期限切れの保守） |
+| 変更履歴 | なし | git に残る |
+| Bot 以外の投稿手段 | なし | GitHub の Web UI |
+
+短い運用連絡という内容の性質上、git 履歴の実利は薄い。
+一方で PAT の保守と部品の多さは恒常的なコストになる。
+**直接 S3 に変更した。**
+
+### 現在の構成
 
 ```
-[Discord /announce] ──> [Lambda] ──repository_dispatch──> [GitHub Actions]
-                                                                │
-[GitHub Web UI で直接編集] ──push──────────────────────────────>│
-                                                                ▼
-                                                    [ビルド] ──> [S3]
+[Discord /announce] ──> [Lambda] ──> [S3: data/announcements.json]
+                                            │ s-maxage=60
+                                            ▼
+                                     反映（1 分以内）
 ```
 
-**この構成の要点は、Discord Bot が S3 にも CloudFront にも触らなくなること。**
-Bot の役割は「GitHub に POST する」だけになり、1-2 の invalidation 問題は
-Bot の責務から完全に消える。Bot が落ちていても GitHub から投稿できる。
+`data/` は Lambda が書く領域で、GitHub Actions 側は IAM の Deny で
+書き込みを禁じてある。お知らせもここに置くことで、
+**このファイルの書き手が Lambda 1 つに定まる**。
 
-残る Lambda は 1 本（`discord-interaction`）のみ。`discord-worker` は廃止する。
-S3 書き込み・CloudFront invalidation・`messages.json` の読み書きが全部不要になるため、
-worker が担っていた処理はすべて Actions 側に移る。
+旧実装から引き継いだ不具合も直した。
 
-1-1 の `await` 漏れは修正必須（`repository_dispatch` の POST を await する）。
+- ワーカー Lambda の呼び出しを `await` していなかった問題
+  （Lambda が return した瞬間に凍結し、処理が消えることがあった）
+- `s-maxage=86400` + invalidation 依存をやめた
+- `tweetnacl` を廃止し Node 標準の Ed25519 で署名検証。依存ゼロになった
 
-### メリット / 残る課題
+### 廃止したもの
 
-- ✅ 障害時にスマホの Discord から即投稿できる（速さを維持）
-- ✅ 履歴・巻き戻し・レビューが git で効く
-- ✅ Bot が壊れても GitHub Web UI という代替経路がある
-- ❌ 反映まで Actions のビルド + sync で 1〜2 分かかる（Bot 経由でも同じ）
-- ❌ Lambda に GitHub の PAT（`repository_dispatch` 権限）を持たせる必要がある
-  → SSM Parameter Store に暗号化して保存。fine-grained PAT で対象リポジトリと
-    Contents 権限のみに絞る
-
----
+- `DiscordCommandWorkerFunction`（S3 書き込みと invalidation が不要になった）
+- `/status` コマンド（ステータスの手動上書き）。新構成では Prometheus の
+  観測結果がそのまま出る。必要になったら別途検討する
 
 ## 6. バージョン / リリースノート表示 【実装済み】
 
@@ -351,7 +368,7 @@ S3 に直接書かず**リポジトリにコミットする**ことで、デプ�
 | 1 | GitHub リポジトリ作成 + Actions で S3 sync（OIDC） | **完了・本番稼働中** |
 | 2 | `status.json` の新スキーマ策定 + Lambda を cron 化 | **完了・本番稼働中** |
 | 3 | フロントエンド刷新（デザイン・日英・ダークモード・期間切替） | **完了・本番稼働中** |
-| 4 | お知らせ機能の置き換え（案C） | コード完了。Lambda の差し替えと PAT 登録が残り |
+| 4 | お知らせ機能の作り直し（Discord → S3 直接） | コード完了。Lambda の差し替えが残り |
 | 5 | バージョン / リリースノート | 表示は稼働中。自動更新に PAT 登録が残り |
 
 **1 と 2 の順序が重要**: 先にフロントを作ると、データ形式が変わるたびに作り直しになる。

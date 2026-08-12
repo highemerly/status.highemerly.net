@@ -566,81 +566,41 @@ Contents: Read and write 権限を持つ PAT が別途必要になる。
 
 ## 5. Discord からお知らせを投稿できるようにする
 
-Bot は **S3 にも CloudFront にも触らない**。GitHub に `repository_dispatch` を
-送るだけで、実際にファイルを作るのは
-[`announce.yml`](../.github/workflows/announce.yml)。
+Bot が S3 の `data/announcements.json` を直接書き換える。
 
 ```
-[Discord /announce]
-      │ repository_dispatch
-      ▼
-[announce ワークフロー] content/announcements/<id>.md を作成/削除してコミット
-      │ workflow_dispatch
-      ▼
-[Deploy ワークフロー] ──> S3 ──> 反映（1〜2 分）
-      │
-      └─ 結果を Discord のメッセージに書き戻す
+[Discord /announce] ──> [Lambda] ──> [S3: data/announcements.json]
+                                            │ s-maxage=60
+                                            ▼
+                                     反映（1 分以内）
 ```
 
-お知らせの正本はリポジトリなので、**Discord 経由でも変更履歴が git に残る**。
-Bot が壊れていても GitHub の Web UI から投稿できる。
+**GitHub は経由しない。** 当初は repository_dispatch でリポジトリに
+ファイルを作らせる構成にしていたが、やめた。その動機は
+「Bot が S3 に書くと CloudFront のキャッシュが消えない」という
+旧実装の問題だったが、それは手順 3 で `s-maxage` を短くした時点で
+解決している。経路が長いだけで得るものが少なかった。
 
-### 5-1. GitHub の PAT を発行して SSM に置く
+`data/` は Lambda が書く領域で、GitHub Actions 側は
+[手順 1-2](#1-2-デプロイ用-iam-ロールを作成) の Deny で書き込みを禁じてある。
+お知らせもここに置くことで、**このファイルの書き手が Lambda 1 つに定まる**。
 
-GitHub → Settings → Developer settings → **Fine-grained personal access tokens**
+### 5-1. Lambda の実行ロールを整える
 
-| 項目 | 値 |
-|---|---|
-| Repository access | Only select repositories → `highemerly/status.highemerly.net` |
-| Repository permissions | **Contents: Read and write**（`repository_dispatch` に必要） |
+**なぜ触るのか。** 旧構成では、この Lambda が S3 に `messages.json` を書き、
+CloudFront を invalidation し、ワーカー Lambda を呼び出していた。
+新構成で必要なのは次の 2 つだけになる。
 
-SSM Parameter Store に登録する。
-
-| 名前 | 種類 |
-|---|---|
-| `/status-page/github/token` | **SecureString** |
-
-### 5-2. Lambda の実行ロールから不要な権限を外す
-
-**なぜ必要か。** 旧構成では、この Lambda が
-「S3 に `messages.json` を書く」「CloudFront を invalidation する」
-「ワーカー Lambda を呼び出す」という 3 つをやっていた。
-
-新構成ではそのどれもしない。GitHub に POST するだけになる。
-使わない権限を残しておくと、コードのバグや万一の乗っ取り時に
-バケットを壊せる状態が残り続けるので、外しておく。
-
-**この Lambda に必要なのは「SSM から 2 つの秘密を読む」ことだけ。**
-
-| 対象 | 用途 |
-|---|---|
-| `/status-page/discord/public-key` | Discord の署名検証 |
-| `/status-page/github/token` | GitHub への `repository_dispatch` |
+| 対象 | 操作 | 用途 |
+|---|---|---|
+| `/status-page/discord/public-key` | 読む | Discord の署名検証 |
+| `data/announcements.json` | 読む・書く | お知らせの追加と削除 |
 
 #### 手順
 
-**1. 実行ロールを開く**
+Lambda → 関数 → `DiscordInteractionFunction` →
+**設定** タブ → **アクセス権限** → 実行ロールのリンク → インラインポリシーを編集 → **JSON**
 
-Lambda → 関数 → `HandleDiscordInteractionFunction` →
-**設定** タブ → **アクセス権限** → 「実行ロール」の下にあるロール名のリンクを押す
-（IAM のロール画面が別タブで開く）
-
-**2. 今ついているポリシーを確認する**
-
-「許可ポリシー」の一覧に、だいたい次の 2 種類が並んでいる。
-
-| 種類 | 例 | どうするか |
-|---|---|---|
-| AWS 管理ポリシー | `AWSLambdaBasicExecutionRole` | **残す**（CloudWatch Logs 用） |
-| インラインポリシー | 関数作成時に付けた名前 | **中身を下記で置き換える** |
-
-> インラインポリシーが複数ある場合や、カスタマー管理ポリシーが
-> アタッチされている場合は、S3 / CloudFront / Lambda 呼び出しを含むものを
-> すべて外し、代わりに下記のインラインポリシーを 1 つ作る。
-
-**3. インラインポリシーを置き換える**
-
-対象のインラインポリシー → **編集** → **JSON** タブ →
 中身を全部消して以下を貼る（`<ACCOUNT_ID>` は自分の値に置換）。
 
 ```json
@@ -648,13 +608,16 @@ Lambda → 関数 → `HandleDiscordInteractionFunction` →
   "Version": "2012-10-17",
   "Statement": [
     {
-      "Sid": "ReadDiscordAndGitHubSecrets",
+      "Sid": "ReadDiscordPublicKey",
       "Effect": "Allow",
       "Action": ["ssm:GetParameter", "ssm:GetParameters"],
-      "Resource": [
-        "arn:aws:ssm:ap-northeast-1:<ACCOUNT_ID>:parameter/status-page/discord/*",
-        "arn:aws:ssm:ap-northeast-1:<ACCOUNT_ID>:parameter/status-page/github/*"
-      ]
+      "Resource": "arn:aws:ssm:ap-northeast-1:<ACCOUNT_ID>:parameter/status-page/discord/*"
+    },
+    {
+      "Sid": "ReadWriteAnnouncements",
+      "Effect": "Allow",
+      "Action": ["s3:GetObject", "s3:PutObject"],
+      "Resource": "arn:aws:s3:::status-highemerly-net/data/announcements.json"
     },
     {
       "Sid": "DecryptSecureString",
@@ -669,121 +632,83 @@ Lambda → 関数 → `HandleDiscordInteractionFunction` →
 }
 ```
 
-> **`ssm:GetParameter` と `ssm:GetParameters` は別の IAM アクション。**
-> 末尾の `s` の有無で別物として扱われ、片方だけでは
-> `not authorized to perform: ssm:GetParameters` で落ちる。
->
-> この Lambda は公開鍵とトークンを 1 回の呼び出しでまとめて取る
-> （`GetParameters`）ので、複数形のほうが必須。上のポリシーは
-> 将来どちらの書き方に変えても動くよう、両方を許可している。
->
-> 手順 2-1 の Lambda は 1 件ずつ取る（`GetParameter`）ので、
-> あちらは単数形だけでよい。
+`AWSLambdaBasicExecutionRole` は残す（CloudWatch Logs 用）。
 
-**4. 結果の確認**
+> **`data/status.v1.json` への書き込みは含めない。** この Lambda が
+> 稼働状況のファイルを触る理由はない。書けるのは
+> `data/announcements.json` の 1 つだけに絞る。
 
-ロールの「許可ポリシー」が次の 2 つだけになっていればよい。
+> **CloudFront の権限は不要。** invalidation は使わない。
+> `s-maxage=60` で 1 分以内に入れ替わる。
 
-- `AWSLambdaBasicExecutionRole`（AWS 管理）
-- 上記のインラインポリシー 1 つ
+> `ssm:GetParameter` と `ssm:GetParameters` は末尾の `s` の有無で
+> 別の IAM アクションとして扱われる。将来どちらの書き方に変えても
+> 動くよう両方許可してある。
 
-`s3:`、`cloudfront:`、`lambda:InvokeFunction` がどこにも残っていないこと。
+### 5-2. Lambda を差し替える
 
-> **手順 2-1 で作った `status-page-update-status-role` とは別のロール。**
-> こちらは Discord 用で、Prometheus も S3 も触らない。混同しないこと。
-
-> 既存ロールを編集するのが不安なら、手順 2-1 と同じ要領で
-> 新しいロール（例: `status-page-discord-role`）を作り、
-> 上記のインラインポリシーと `AWSLambdaBasicExecutionRole` を付けて、
-> Lambda の **設定 → アクセス権限 → 編集** で実行ロールを差し替えてもよい。
-> 旧ロールは動作確認後に削除する。
-
-### 5-3. Lambda を差し替える
-
-`HandleDiscordInteractionFunction` を開く。
+`DiscordInteractionFunction` を開く。
 
 **この関数も外部ライブラリを使わない。** 署名検証は Node 標準の Ed25519、
-HTTP は標準 `fetch`。zip を作らずコンソールに貼るだけでよい。
+AWS SDK v3 はランタイム同梱。**zip を作らずコンソールに貼るだけでよい。**
 
 1. ランタイムを **Node.js 24.x** に変更
-2. `index.mjs` を `index.js` にリネームし、
+2. `index.mjs` を **`index.js` にリネーム**し、
    [`lambda/discord-interaction/index.js`](../lambda/discord-interaction/index.js) を貼り付け
+   （リネームを忘れると `require is not defined` で落ちる）
 3. 環境変数
 
    | キー | 値 |
    |---|---|
-   | `GITHUB_REPO` | `highemerly/status.highemerly.net` |
+   | `S3_BUCKET` | `status-highemerly-net` |
 
-4. タイムアウトを **10 秒**に（既定の 3 秒だと GitHub への往復で足りないことがある）
+4. タイムアウトを **10 秒**に
 
 > **Discord の 3 秒制限について**
-> この関数は受け付けた時点で即座に応答を返し、実処理は GitHub Actions に任せる。
-> 応答までにやるのは署名検証と GitHub への POST 1 回だけなので、
-> コールドスタートを含めても収まる。
-> 実際の公開結果は、ワークフローが同じメッセージを書き換えて知らせる。
+> この関数は署名検証・S3 の読み書き・応答をすべて同期で行う。
+> どれも同一リージョン内で完結するため、コールドスタートを含めても収まる。
+> 結果もその場で返せるので、後から書き戻す仕組みが要らない。
 
-### 5-4. 旧ワーカーを削除する
+### 5-3. 旧ワーカーを削除する
 
-`DiscordCommandWorkerFunction` を**削除**する。S3 書き込みも
-CloudFront invalidation も不要になったため、担当する処理が残っていない。
+`DiscordCommandWorkerFunction` を**削除**する。
+S3 書き込みも invalidation も不要になり、担当する処理が残っていない。
 
 `data/messages.json` も使わなくなるので削除してよい。
 
-### 5-5. スラッシュコマンドを登録し直す
+### 5-4. スラッシュコマンドを登録し直す
 
-コマンドの定義（`/announce` の引数など）を変えたので、Discord 側に登録し直す。
-
-#### 必要な値
-
-すべて [Discord Developer Portal](https://discord.com/developers/applications) から取る。
+必要な値と取得元。すべて
+[Discord Developer Portal](https://discord.com/developers/applications) から取る。
 
 | 変数 | 何か | 取得元 |
 |---|---|---|
-| `APPLICATION_ID` | このボットのアプリケーション ID | Developer Portal → 対象アプリ → **General Information** → Application ID |
-| `BOT_TOKEN` | ボットの認証トークン | Developer Portal → 対象アプリ → **Bot** → Token の **Reset Token** |
-| `GUILD_ID` | 登録先の Discord サーバー ID | Discord アプリでサーバー名を右クリック → **サーバー ID をコピー** |
+| `APPLICATION_ID` | このボットのアプリケーション ID | 対象アプリ → **General Information** → Application ID |
+| `BOT_TOKEN` | ボットの認証トークン | 対象アプリ → **Bot** → Token の **Reset Token** |
+| `GUILD_ID` | 登録先の Discord サーバー ID | Discord でサーバー名を右クリック → **サーバー ID をコピー** |
 
-> **`BOT_TOKEN` は認証情報。** これがあればボットとして何でもできる。
-> ファイルに書かない、コミットしない、貼り付け先を間違えない。
->
-> Token は**発行時に一度しか表示されない**。控えていなければ Reset Token で
-> 作り直す（作り直すと古い Token は無効になる）。
-> なお SSM に入れてある `/status-page/discord/public-key` は
-> Bot Token とは別物で、General Information ページにある公開鍵のほう。
+> **`BOT_TOKEN` は認証情報。** ファイルに書かない、コミットしない。
+> 発行時に一度しか表示されないので、控えていなければ Reset Token で作り直す
+> （古い Token は無効になる）。
+> SSM の `/status-page/discord/public-key` は別物で、
+> General Information ページにある公開鍵のほう。
 
 > **サーバー ID をコピー** が右クリックメニューに出ない場合は、
 > Discord の ユーザー設定 → **詳細設定** → **開発者モード** を有効にする。
-
-#### GUILD_ID を付けるかどうか
 
 | | 反映 | 見える範囲 |
 |---|---|---|
 | `GUILD_ID` を指定 | **即時** | そのサーバーのみ |
 | `GUILD_ID` を省略 | 最大 1 時間 | ボットが入っている全サーバー |
 
-運用しているサーバーが 1 つなら `GUILD_ID` を指定するのがよい。
-すぐ反映されるので、試しながら直せる。
-
-#### 実行
-
 リポジトリのルートで実行する（`config/services.json` を読むため）。
 
 ```bash
-APPLICATION_ID=1234567890 BOT_TOKEN=xxxxx GUILD_ID=9876543210 \
-  ./scripts/register-discord-command.sh
+ APPLICATION_ID=1234567890 BOT_TOKEN=xxxxx GUILD_ID=9876543210 \
+   ./scripts/register-discord-command.sh
 ```
 
-> **行頭に空白を 1 つ入れて実行すると、シェル履歴に残らない**（bash / zsh の既定設定）。
-> 残ってしまった場合は `history -d <番号>` などで消す。
-
-成功すると登録されたコマンド定義が表示される。
-
-```
-/announce action:create title:メンテナンスのお知らせ body:... level:maintenance category:handon-club
-/announce action:delete id:2026-08-07-08-54-52
-```
-
-`create` すると Bot が `id` を返す。削除にはその `id` を使う。
+> 行頭に空白を 1 つ入れて実行すると、シェル履歴に残らない（bash / zsh の既定設定）。
 
 カテゴリの選択肢は `config/services.json` から生成している。
 **カテゴリを増やしたらこのスクリプトを流し直すこと。**
@@ -792,21 +717,25 @@ APPLICATION_ID=1234567890 BOT_TOKEN=xxxxx GUILD_ID=9876543210 \
 > 新構成では Prometheus の観測結果がそのまま出る。
 > 不要なコマンドは `./scripts/delete-discord-commands.sh` で消せる。
 
-### 5-6. 動作確認
+### 5-5. 動作確認
 
-1. Discord で `/announce action:create title:テスト` を実行
-2. 即座に「お知らせを送信しました。id: ...」が返る
-3. Actions タブで **Announce** → **Deploy** が続けて走る
-4. 1〜2 分後にサイト上部にお知らせが出る
-5. Discord のメッセージが「✅ 受け付けました」に書き換わる
-6. `/announce action:delete id:<返ってきた id>` で消えることを確認
+```
+/announce action:create title:テスト
+```
 
-反応がない場合は CloudWatch Logs を見る。よくある失敗:
+1. 即座に「お知らせを公開しました。id: ...」が返る
+2. **1 分以内**にサイト上部にお知らせが出る
+3. `/announce action:delete id:<返ってきた id>` で消える
+
+反応がない場合は CloudWatch Logs を見る。
 
 | ログ | 原因 |
 |---|---|
-| `GitHub dispatch failed: 404` | PAT の対象リポジトリ違い、または Contents 権限不足 |
-| `GitHub dispatch failed: 401` | PAT の期限切れ |
-| `GitHub token not found` | SSM に `/status-page/github/token` が無い |
+| `not authorized to perform: s3:PutObject` | 5-1 のポリシーが未適用 |
+| `not authorized to perform: ssm:GetParameter` | 同上。末尾の `s` の有無も確認 |
 | `invalid signature` | `/status-page/discord/public-key` が違う |
+| `require is not defined` | ファイル名が `index.mjs` のまま |
 | `Task timed out` | タイムアウトが 3 秒のまま。10 秒に上げる |
+
+> お知らせは **20 件まで**保持し、超えたぶんは古いものから落ちる。
+> 配信サイズを抑えるためで、通常の運用で上限に当たることはない。

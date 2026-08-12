@@ -91,6 +91,25 @@ function write(relative, data) {
 }
 
 write('public/data/status.v1.json', status);
+
+// お知らせは本番では Lambda が data/ に置く。開発用に 1 件だけ作る
+write('public/data/announcements.json', {
+  announcements: [
+    {
+      id: 'dev-sample',
+      level: 'maintenance',
+      title: {
+        ja: 'データベースのメンテナンスを行います',
+        en: 'Scheduled database maintenance',
+      },
+      body: {
+        ja: '8月10日 02:00 から 03:00 まで、投稿の閲覧ができなくなります。',
+        en: 'Posts will be unavailable from 02:00 to 03:00 on 10 August.',
+      },
+      publishedAt: new Date(endSec * 1000 - 3600 * 1000).toISOString(),
+    },
+  ],
+});
 write('public/config/services.json', config);
 
 // バージョンは scripts/build-versions.js が作る。まだ無ければ飛ばす
