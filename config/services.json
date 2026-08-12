@@ -101,6 +101,17 @@
         "manifest": "manifests/dominion/prd/web.yaml",
         "image": "ghcr.io/highemerly/dominion"
       }
+    },
+    {
+      "id": "common",
+      "name": {
+        "ja": "共通",
+        "en": "Common"
+      },
+      "description": {
+        "ja": "各サービスが共通して使う基盤の稼働状況です。",
+        "en": "Shared infrastructure that all of the services above depend on."
+      }
     }
   ],
   "services": [
@@ -226,6 +237,45 @@
       "name": "Database",
       "prometheusQuery": "cnpg_collector_up{namespace='shared-postgres-prd'}",
       "categoryId": "shamezo"
+    },
+    {
+      "id": "common-k8s",
+      "name": {
+        "ja": "Kubernetes",
+        "en": "Kubernetes"
+      },
+      "prometheusQuery": [
+        "kube_node_status_condition{condition='Ready', status='true'}",
+        "(sum(kube_node_status_condition{condition='Ready', status='true'}) or vector(0)) >= bool 1"
+      ],
+      "categoryId": "common"
+    },
+    {
+      "id": "common-monitoring",
+      "name": {
+        "ja": "監視基盤",
+        "en": "Monitoring"
+      },
+      "prometheusQuery": [
+        "(count(up{job='blackbox-http'} == 1) or vector(0)) > bool 0",
+        "(count(up{namespace='monitoring'} == 1) or vector(0)) > bool 0"
+      ],
+      "categoryId": "common"
+    },
+    {
+      "id": "common-rum",
+      "name": {
+        "ja": "RUM 収集",
+        "en": "RUM Collector"
+      },
+      "prometheusQuery": "probe_http_status_code{env='production', service='next-rum'}",
+      "categoryId": "common"
+    },
+    {
+      "id": "common-delivery",
+      "name": "Media Proxy",
+      "prometheusQuery": "probe_http_status_code{endpoint='web', env='production', service='next-media-delivery'}",
+      "categoryId": "common"
     }
   ]
 }
