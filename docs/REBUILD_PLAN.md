@@ -36,7 +36,7 @@ Lambda はハンドラが return した瞬間に実行環境を**凍結**する�
 
 **原因: `s-maxage=86400` と invalidation への依存**
 
-[`lambda/discord-worker/index.js:279`](../lambda/discord-worker/index.js#L279)
+`lambda/discord-worker/index.js:279`（現在は削除済み。コミット `a5e94ae` を参照）
 
 ```js
 CacheControl: 'max-age=30, s-maxage=86400'   // CloudFront は 24 時間キャッシュ
@@ -44,7 +44,7 @@ CacheControl: 'max-age=30, s-maxage=86400'   // CloudFront は 24 時間キャ�
 
 CloudFront に 24 時間持たせておいて、毎回 invalidation で消す設計になっている。
 つまり **invalidation が 1 回でも失敗すると 24 時間ずれる**。しかも失敗は握り潰されている
-（[`index.js:60-62`](../lambda/discord-worker/index.js#L60-L62) の catch でログのみ）。
+（同ファイル 60-62 行の catch でログのみ）。
 
 さらに `CreateInvalidation` は**リクエストを受け付けた時点で返る非同期 API** で、
 実際の反映には数十秒〜数分かかる。ログの `invalidation completed` は完了を意味しない。
@@ -368,8 +368,8 @@ S3 に直接書かず**リポジトリにコミットする**ことで、デプ�
 | 1 | GitHub リポジトリ作成 + Actions で S3 sync（OIDC） | **完了・本番稼働中** |
 | 2 | `status.json` の新スキーマ策定 + Lambda を cron 化 | **完了・本番稼働中** |
 | 3 | フロントエンド刷新（デザイン・日英・ダークモード・期間切替） | **完了・本番稼働中** |
-| 4 | お知らせ機能の作り直し（Discord → S3 直接） | コード完了。Lambda の差し替えが残り |
-| 5 | バージョン / リリースノート | 表示は稼働中。自動更新に PAT 登録が残り |
+| 4 | お知らせ機能の作り直し（Discord → S3 直接） | **完了・本番稼働中** |
+| 5 | バージョン / リリースノート | **完了・本番稼働中** |
 
 **1 と 2 の順序が重要**: 先にフロントを作ると、データ形式が変わるたびに作り直しになる。
 
@@ -387,7 +387,6 @@ Terraform 化の際は書き直しになる。
 > これを避けるため、手動で作ったリソースは必ず `AWS_SETUP.md` に
 > **スクリーンショットではなく設定値のテキスト**で残す。Terraform 化のときの入力になる。
 
-古いドキュメント（`MANUAL_DEPLOYMENT_GUIDE.md`, `QUICKSTART_MANUAL.md`,
-`DEPLOYMENT.md`, `AWS_ARCHITECTURE.md`）は現状すでに実態とずれている
-（実在しない `app/page-client.tsx`, `app/api/`, `terraform/main.tf` を参照している）。
-新アーキテクチャ確定後に統廃合する。
+旧アーキテクチャのドキュメント（`MANUAL_DEPLOYMENT_GUIDE.md`, `QUICKSTART_MANUAL.md`,
+`DEPLOYMENT.md`, `AWS_ARCHITECTURE.md`）は**削除した**。実態とずれており、
+残しておくと事故のもとになるため。内容はコミット `a5e94ae` に残っている。

@@ -140,35 +140,38 @@ aws ssm get-parameter \
 
 ## 🛡️ Lambda IAM 権限
 
-Lambda関数には以下の権限が必要：
+**関数ごとに必要な最小限だけを与える。** まとめて `parameter/status-page/*` や
+`data/*` を許可しない。具体的なポリシーは
+[docs/AWS_SETUP.md](docs/AWS_SETUP.md) の手順 2-1 と 5-1 にある。
 
-```json
-{
-  "Version": "2012-10-17",
-  "Statement": [
-    {
-      "Effect": "Allow",
-      "Action": [
-        "ssm:GetParameter"
-      ],
-      "Resource": [
-        "arn:aws:ssm:ap-northeast-1:*:parameter/status-page/*"
-      ]
-    },
-    {
-      "Effect": "Allow",
-      "Action": [
-        "s3:GetObject",
-        "s3:PutObject"
-      ],
-      "Resource": [
-        "arn:aws:s3:::status-highemerly-net/data/*",
-        "arn:aws:s3:::status-highemerly-net/config/*"
-      ]
-    }
-  ]
-}
-```
+| 関数 | 読む | 書く |
+|---|---|---|
+| `StatusPageUpdateStatus` | `config/services.json`<br>`/status-page/prometheus/*` | `data/status.v1.json` |
+| `DiscordInteractionFunction` | `/status-page/discord/*` | `data/announcements.json` |
+
+守るべき原則:
+
+- **書き込み先はファイル単位で指定する。** `data/*` を許可すると、
+  稼働状況のファイルを Discord Bot が壊せる状態になる
+- **SSM は用途ごとのパスに絞る。** `/status-page/*` にすると、
+  Prometheus のパスワードを Discord Bot が読めてしまう
+- **ARN のアカウント ID に `*` を使わない**
+- `SecureString` を読むには `ssm:GetParameter` に加えて `kms:Decrypt` が要る。
+  `kms:ViaService` 条件で SSM 経由に限定する
+
+---
+
+## 🗂️ S3 の書き込み領域
+
+**バケット内で書き手を 1 つに定める。**
+
+| プレフィックス | 書く主体 |
+|---|---|
+| `data/` | **Lambda のみ**（稼働状況とお知らせ） |
+| それ以外（`config/`, `_next/`, HTML） | **GitHub Actions のみ** |
+
+GitHub Actions のロールには `data/` への書き込みを **Deny** で明示的に禁じてある。
+`aws s3 sync --delete` が Lambda の出力を消す事故を防ぐため。
 
 ---
 
@@ -218,6 +221,11 @@ Lambda関数には以下の権限が必要：
    ```
 
 3. **CloudFrontキャッシュをクリア**
+
+   通常の更新では invalidation を使わない（`s-maxage=60` で入れ替わるため。
+   常用するとコストがかかる）。ただし**漏洩時は 60 秒すら待てない**ので、
+   このときは使ってよい。
+
    ```bash
    aws cloudfront create-invalidation \
      --distribution-id YOUR_DIST_ID \
@@ -226,7 +234,9 @@ Lambda関数には以下の権限が必要：
 
 4. **Gitコミット履歴を確認**
    - 機密情報がコミットされていないか確認
-   - 含まれている場合は `git filter-branch` で削除
+   - 含まれている場合は `git filter-repo --replace-text` で履歴から除去する
+     （`git filter-branch` は非推奨）。**このリポジトリは公開されている**ため、
+     push 済みなら値そのものを無効化すること
 
 ---
 

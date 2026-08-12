@@ -27,8 +27,12 @@ Prometheus のデータを 5 分ごとに Lambda が集計し、静的サイト�
   （5 分ごとに invalidation を打つと月 $38 かかるため）
 - **AWS 認証は OIDC**。GitHub に長期のアクセスキーを置かない
 
-詳細は [docs/REBUILD_PLAN.md](docs/REBUILD_PLAN.md)、
-セットアップ手順は [docs/AWS_SETUP.md](docs/AWS_SETUP.md) を参照。
+| ドキュメント | 内容 |
+|---|---|
+| [CLAUDE.md](CLAUDE.md) | 触るときの注意（踏みやすい落とし穴をまとめてある） |
+| [docs/AWS_SETUP.md](docs/AWS_SETUP.md) | AWS 側の手動セットアップ手順 |
+| [docs/REBUILD_PLAN.md](docs/REBUILD_PLAN.md) | 作り直しの経緯と旧実装の原因分析 |
+| [SECURITY.md](SECURITY.md) | 機密情報の扱いと IAM の原則 |
 
 ---
 
@@ -153,8 +157,8 @@ Lambda は別途デプロイする:
 /announce action:delete id:2026-08-07-09-30-56
 ```
 
-Lambda が S3 の `data/announcements.json` を直接書き換える。
-反映は 1 分以内（CloudFront の `s-maxage`）。最大 20 件まで保持する。
+`DiscordInteractionFunction` が S3 の `data/announcements.json` を直接書き換える。
+GitHub は経由しない。反映は 1 分以内（CloudFront の `s-maxage`）。最大 20 件まで保持する。
 
 ### 機密情報
 
@@ -180,21 +184,26 @@ AWS SSM Parameter Store で管理する。
 
 ---
 
-## 進行中の作り直し
-
-[docs/REBUILD_PLAN.md](docs/REBUILD_PLAN.md) に計画と、旧実装の不具合の原因分析がある。
+## 作り直しの進捗
 
 | # | 内容 | 状態 |
 |---|---|---|
-| 1 | GitHub Actions で S3 sync（OIDC） | **本番稼働中** |
-| 2 | status.json 新スキーマ + Lambda cron 化 | **本番稼働中** |
-| 3 | フロントエンド刷新 | **本番稼働中** |
-| 4 | お知らせ機能の作り直し（Discord → S3 直接） | コード完了 / Lambda 差し替え待ち |
-| 5 | バージョン / リリースノート表示 | 表示は稼働中 / PAT 登録待ち |
+| 1 | GitHub Actions で S3 sync（OIDC） | 完了 |
+| 2 | status.json 新スキーマ + Lambda cron 化 | 完了 |
+| 3 | フロントエンド刷新 | 完了 |
+| 4 | お知らせ機能の作り直し（Discord → S3 直接） | 完了 |
+| 5 | バージョン / リリースノート表示 | 完了 |
 
-> **以下のドキュメントは旧アーキテクチャのもので、内容が古い。**
-> 手順 4・5 の完了後に整理する。
-> `MANUAL_DEPLOYMENT_GUIDE.md` / `QUICKSTART_MANUAL.md` / `DEPLOYMENT.md` / `AWS_ARCHITECTURE.md`
+**すべて本番稼働中。** 経緯と、旧実装で見つかった不具合の原因分析は
+[docs/REBUILD_PLAN.md](docs/REBUILD_PLAN.md) にある。
+
+### 残っていること
+
+- **Terraform 化**。構成が固まったので着手できる。手動で作ったリソースの
+  設定値は [docs/AWS_SETUP.md](docs/AWS_SETUP.md) に記録してある
+- **旧構成の撤去**。`UpdateStatusFunction`、API Gateway の `/api/v1/status`、
+  `data/status.json`、`data/messages.json`。切り戻し先なので数日置いてから
+- **ステータスの手動上書き**。旧 `/status` コマンドで出来たが未実装
 
 ---
 
