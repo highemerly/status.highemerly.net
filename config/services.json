@@ -129,6 +129,12 @@
       "categoryId": "handon-club"
     },
     {
+      "id": "handon-db",
+      "name": "Database",
+      "prometheusQuery": "cnpg_collector_up{namespace='handon-prd'}",
+      "categoryId": "handon-club"
+    },
+    {
       "id": "hiyoko-web",
       "name": "Web",
       "prometheusQuery": "probe_http_status_code{endpoint='web', env='production', service='hiyoko'}",
@@ -147,6 +153,12 @@
       "categoryId": "hiyoko-club"
     },
     {
+      "id": "hiyoko-db",
+      "name": "Database",
+      "prometheusQuery": "cnpg_collector_up{namespace='hiyoko-prd'}",
+      "categoryId": "hiyoko-club"
+    },
+    {
       "id": "hosteka-web",
       "name": "Web",
       "prometheusQuery": "probe_http_status_code{endpoint='web', env='production', service='hosteka'}",
@@ -156,6 +168,12 @@
       "id": "hosteka-delivery",
       "name": "Media Proxy",
       "prometheusQuery": "probe_http_status_code{endpoint='web', env='production', service='next-media-delivery'}",
+      "categoryId": "hosteka"
+    },
+    {
+      "id": "hosteka-db",
+      "name": "Database",
+      "prometheusQuery": "cnpg_collector_up{namespace='shared-postgres-prd'}",
       "categoryId": "hosteka"
     },
     {
@@ -192,6 +210,12 @@
       "id": "movapic-neo-delivery",
       "name": "Media Proxy",
       "prometheusQuery": "probe_http_status_code{endpoint='web', env='production', service='next-media-delivery'}",
+      "categoryId": "shamezo"
+    },
+    {
+      "id": "movapic-neo-db",
+      "name": "Database",
+      "prometheusQuery": "cnpg_collector_up{namespace='shared-postgres-prd'}",
       "categoryId": "shamezo"
     }
   ]
