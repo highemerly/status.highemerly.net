@@ -45,7 +45,8 @@ export function ServiceRow({
         </div>
       </div>
 
-      <div className="mt-2">
+      {/* pl-5 はサービス総合のバー（CategoryCard）と同じ。左端を揃える */}
+      <div className="mt-2 pl-5">
         {entry ? (
           <Timeline
             history={entry.h}
