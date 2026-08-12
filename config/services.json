@@ -135,6 +135,15 @@
       "categoryId": "handon-club"
     },
     {
+      "id": "handon-sidekiq",
+      "name": "Queue",
+      "prometheusQuery": [
+        "max(sidekiq_queue_latency_seconds{service='handon', env='production'}) < bool 180",
+        "max(sidekiq_queue_latency_seconds{service='handon', env='production'}) < bool 900"
+      ],
+      "categoryId": "handon-club"
+    },
+    {
       "id": "hiyoko-web",
       "name": "Web",
       "prometheusQuery": "probe_http_status_code{endpoint='web', env='production', service='hiyoko'}",
