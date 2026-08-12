@@ -169,6 +169,23 @@ IAM → ロール → **ロールを作成** → カスタム信頼ポリシー
 - `Credentials could not be loaded` → ワークフローの
   `permissions: id-token: write` があるか
 
+### ワークフローが「Re-run」で失敗するとき
+
+**失敗した実行の Re-run は、当時のコミットを土台にする。** その後 `main` が
+進んでいると、コミットを作っても push が弾かれる。
+
+```
+! [rejected]        main -> main (fetch first)
+```
+
+原因を直したあとは Re-run ではなく、Actions タブから
+**Run workflow**（`workflow_dispatch`）で新しく実行すること。
+こちらは常に最新の `main` を使う。
+
+> [`update-versions.yml`](../.github/workflows/update-versions.yml) には
+> 取り込み直して再試行する処理を入れてあるが、
+> 土台が古いまま複雑な差分になった場合は素直に新規実行するほうが早い。
+
 ### デプロイが起動しないとき
 
 [`deploy.yml`](../.github/workflows/deploy.yml) は `paths-ignore` で

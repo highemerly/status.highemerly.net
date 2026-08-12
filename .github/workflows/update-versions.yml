@@ -59,7 +59,24 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add config/versions.json
           git commit -m "chore: サービスのバージョンを更新"
-          git push
+
+          # 定期実行と誰かの push が重なると、そのままでは押し戻せない。
+          # 失敗した実行を Re-run した場合も、当時のコミットを土台にするので同じ状態になる。
+          # 取り込み直して数回試す。
+          pushed=false
+          for attempt in 1 2 3; do
+            if git push; then
+              pushed=true
+              break
+            fi
+            echo "push が弾かれました（${attempt} 回目）。origin/main を取り込んで再試行します"
+            git pull --rebase origin main || break
+          done
+
+          if [ "$pushed" != true ]; then
+            echo "::error::config/versions.json を push できませんでした"
+            exit 1
+          fi
 
           echo "changed=true" >> "$GITHUB_OUTPUT"
 
