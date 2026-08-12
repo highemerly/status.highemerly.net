@@ -144,8 +144,25 @@ Lambda は別途デプロイする:
 }
 ```
 
+`releases` はタグ名で GitHub Releases API を直接引く。
 `releases` を省く、または該当タグのリリースが無い場合は、バージョンだけ表示して
-リリースノートのリンクは出さない。生成物は `config/versions.json`
+リリースノートのリンクは出さない。
+
+パッチ版のリリースノートを切っていないサービス向けに、代替タグを指定できる。
+
+```json
+"releases": {
+  "repo": "highemerly/movapic-neo",
+  "tagPrefix": "v",
+  "fallbackTags": ["{major}.{minor}.0"]
+}
+```
+
+`v1.4.4` が無ければ `v1.4.0` を引く、という動き。
+使える置換は `{version}` `{major}` `{minor}` `{patch}`。
+代替に落ちた場合はリンクのツールチップにその旨が出る。
+
+生成物は `config/versions.json`
 （[update-versions ワークフロー](.github/workflows/update-versions.yml)が日次でコミットする）。
 
 ### お知らせ

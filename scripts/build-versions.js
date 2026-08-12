@@ -41,7 +41,37 @@ function extractTag(manifestPath, image) {
   return match[1];
 }
 
-async function fetchRelease(releases, tag) {
+/**
+ * 引き当てるタグの候補を、優先順に並べる。
+ *
+ * サービスによっては、パッチ版のリリースノートを切っていないことがある。
+ * 例: SHAMEZO は 1.4.4 を動かしていても、ノートは 1.4.0 にまとめてある。
+ * その場合は fallbackTags に "{major}.{minor}.0" を書いておくと、
+ * 完全一致が無いときにそちらへ落ちる。
+ *
+ * 使える置換: {version} {major} {minor} {patch}
+ */
+function tagCandidates(releases, version) {
+  const candidates = [version];
+
+  const semver = version.match(/^(\d+)\.(\d+)\.(\d+)/);
+  for (const template of releases.fallbackTags || []) {
+    // semver でないバージョン（例: 2026-05-19）には展開しようがないので飛ばす
+    if (!semver && /\{(major|minor|patch)\}/.test(template)) continue;
+
+    const filled = template
+      .replace(/\{version\}/g, version)
+      .replace(/\{major\}/g, semver?.[1] ?? '')
+      .replace(/\{minor\}/g, semver?.[2] ?? '')
+      .replace(/\{patch\}/g, semver?.[3] ?? '');
+
+    if (filled && !candidates.includes(filled)) candidates.push(filled);
+  }
+
+  return candidates;
+}
+
+async function fetchOneRelease(releases, tag) {
   const prefix = releases.tagPrefix || '';
   const url = `https://api.github.com/repos/${releases.repo}/releases/tags/${prefix}${tag}`;
 
@@ -63,9 +93,26 @@ async function fetchRelease(releases, tag) {
   const release = await response.json();
   return {
     name: release.name || release.tag_name,
+    tag: release.tag_name,
     url: release.html_url,
     publishedAt: release.published_at,
   };
+}
+
+/** 候補を順に試し、最初に見つかったリリースを返す */
+async function fetchRelease(releases, version) {
+  const candidates = tagCandidates(releases, version);
+
+  for (const candidate of candidates) {
+    const release = await fetchOneRelease(releases, candidate);
+    if (!release) continue;
+
+    // 完全一致でなければ、画面側で「別の版のノート」と示せるよう記録する
+    release.exact = candidate === version;
+    return release;
+  }
+
+  return null;
 }
 
 async function main() {
@@ -104,10 +151,10 @@ async function main() {
       }
 
       categories[category.id] = entry;
-      console.log(
-        `${category.id.padEnd(14)} ${version.padEnd(22)}` +
-        `${entry.release ? entry.release.url : 'リリースノートなし'}`
-      );
+      const note = entry.release
+        ? entry.release.url + (entry.release.exact ? '' : `  （${entry.release.tag} で代替）`)
+        : 'リリースノートなし';
+      console.log(`${category.id.padEnd(14)} ${version.padEnd(22)}${note}`);
     } catch (error) {
       // 1 つ落ちても他のバージョンは出したいので、記録して続行する
       failures++;

@@ -11,7 +11,7 @@ import {
   uptime,
   type RangeHours,
 } from '@/lib/status';
-import type { Dict } from '@/lib/i18n';
+import { fill, type Dict } from '@/lib/i18n';
 import type {
   Category,
   Lang,
@@ -186,7 +186,14 @@ export function CategoryCard({
                 href={version.release.url}
                 target="_blank"
                 rel="noopener noreferrer"
-                title={`${dict.releaseNotes}（${version.imageTag}）`}
+                title={
+                  version.release.exact === false
+                    ? fill(dict.releaseNotesFallback, {
+                        tag: version.release.tag,
+                        version: version.version,
+                      })
+                    : `${dict.releaseNotes}（${version.imageTag}）`
+                }
                 className="inline-flex items-center gap-1 rounded text-xs text-accent hover:underline"
               >
                 <span className="tabular-nums">

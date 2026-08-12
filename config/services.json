@@ -65,7 +65,11 @@
         "manifest": "manifests/movapic-neo/prd/web.yaml",
         "image": "ghcr.io/highemerly/movapic-neo",
         "releases": {
-          "repo": "highemerly/movapic-neo"
+          "repo": "highemerly/movapic-neo",
+          "tagPrefix": "v",
+          "fallbackTags": [
+            "{major}.{minor}.0"
+          ]
         }
       }
     },

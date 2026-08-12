@@ -1,13 +1,15 @@
 {
-  "updatedAt": "2026-08-12T12:33:11.879Z",
+  "updatedAt": "2026-08-12T12:48:27.221Z",
   "categories": {
     "handon-club": {
       "version": "4.6.5",
       "imageTag": "4.6.5-20260806135158",
       "release": {
         "name": "v4.6.5",
+        "tag": "v4.6.5",
         "url": "https://github.com/mastodon/mastodon/releases/tag/v4.6.5",
-        "publishedAt": "2026-08-06T12:23:44Z"
+        "publishedAt": "2026-08-06T12:23:44Z",
+        "exact": true
       }
     },
     "hiyoko-club": {
@@ -15,8 +17,10 @@
       "imageTag": "2026.7.0",
       "release": {
         "name": "2026.7.0",
+        "tag": "2026.7.0",
         "url": "https://github.com/misskey-dev/misskey/releases/tag/2026.7.0",
-        "publishedAt": "2026-07-31T07:47:58Z"
+        "publishedAt": "2026-07-31T07:47:58Z",
+        "exact": true
       }
     },
     "hosteka": {
@@ -25,7 +29,14 @@
     },
     "shamezo": {
       "version": "1.4.4",
-      "imageTag": "1.4.4"
+      "imageTag": "1.4.4",
+      "release": {
+        "name": "1.4",
+        "tag": "v1.4.0",
+        "url": "https://github.com/highemerly/movapic-neo/releases/tag/v1.4.0",
+        "publishedAt": "2026-08-12T12:46:26Z",
+        "exact": false
+      }
     },
     "anypost": {
       "version": "2026-05-19",

@@ -99,8 +99,12 @@ export interface VersionEntry {
   /** リリースを切っていないサービスでは存在しない */
   release?: {
     name: string;
+    /** 実際に引き当てたタグ。fallbackTags で代替した場合は version と一致しない */
+    tag: string;
     url: string;
     publishedAt: string;
+    /** version と完全一致するタグだったか */
+    exact: boolean;
   };
 }
 
