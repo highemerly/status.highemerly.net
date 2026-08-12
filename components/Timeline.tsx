@@ -1,6 +1,7 @@
 'use client';
 
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
+import { StatusIcon } from './StatusIcon';
 import { toBuckets, type RangeHours } from '@/lib/status';
 import { fill, formatTime, type Dict } from '@/lib/i18n';
 import type { Lang, ServiceStatus, StatusPayload } from '@/lib/types';
@@ -30,6 +31,8 @@ export function Timeline({
     [history, hours, payload]
   );
 
+  const [hovered, setHovered] = useState<number | null>(null);
+
   if (buckets.length === 0) {
     return <p className="text-xs text-fg-subtle">{dict.noData}</p>;
   }
@@ -38,24 +41,42 @@ export function Timeline({
   const first = buckets[0];
   const last = buckets[buckets.length - 1];
 
+  // 期間を切り替えると本数が変わるので、範囲外になった添字は無効として扱う
+  const active = hovered !== null && hovered < buckets.length ? buckets[hovered] : null;
+
   return (
     <div>
-      <div className="flex h-8 items-stretch gap-px" role="img"
-        aria-label={fill(dict.bucketTooltip, {
-          start: formatTime(first.start, lang, withDate),
-          end: formatTime(last.end, lang, withDate),
-        })}
-      >
-        {buckets.map((bucket, i) => (
+      <div className="relative" onPointerLeave={() => setHovered(null)}>
+        {active && (
           <div
-            key={i}
-            className={`bar flex-1 ${BAR_COLOR[bucket.status]}`}
-            title={`${fill(dict.bucketTooltip, {
-              start: formatTime(bucket.start, lang, withDate),
-              end: formatTime(bucket.end, lang, withDate),
-            })}  ${dict.status[bucket.status]}`}
-          />
-        ))}
+            className="pointer-events-none absolute bottom-full z-10 mb-1.5 flex items-center gap-1.5 whitespace-nowrap rounded border border-line bg-surface px-2 py-1 text-[11px] shadow-sm"
+            style={tooltipPosition(hovered!, buckets.length)}
+          >
+            <span className="tabular-nums text-fg-muted">
+              {fill(dict.bucketTooltip, {
+                start: formatTime(active.start, lang, withDate),
+                end: formatTime(active.end, lang, withDate),
+              })}
+            </span>
+            <StatusIcon status={active.status} size={9} />
+            <span className="text-fg">{dict.status[active.status]}</span>
+          </div>
+        )}
+
+        <div className="flex h-8 items-stretch gap-px" role="img"
+          aria-label={fill(dict.bucketTooltip, {
+            start: formatTime(first.start, lang, withDate),
+            end: formatTime(last.end, lang, withDate),
+          })}
+        >
+          {buckets.map((bucket, i) => (
+            <div
+              key={i}
+              className={`bar flex-1 ${BAR_COLOR[bucket.status]}`}
+              onPointerEnter={() => setHovered(i)}
+            />
+          ))}
+        </div>
       </div>
 
       <div className="mt-1 flex justify-between text-[11px] tabular-nums text-fg-subtle">
@@ -64,4 +85,15 @@ export function Timeline({
       </div>
     </div>
   );
+}
+
+/*
+ * ツールチップの水平位置。
+ * 基本はバーの中央に置くが、両端では画面外に出るので端に寄せる。
+ */
+function tooltipPosition(index: number, total: number): React.CSSProperties {
+  const center = ((index + 0.5) / total) * 100;
+  if (center < 20) return { left: 0 };
+  if (center > 80) return { right: 0 };
+  return { left: `${center}%`, transform: 'translateX(-50%)' };
 }

@@ -241,8 +241,8 @@
     {
       "id": "common-k8s",
       "name": {
-        "ja": "Kubernetes",
-        "en": "Kubernetes"
+        "ja": "Server (Kubernetes)",
+        "en": "Server (Kubernetes)"
       },
       "prometheusQuery": [
         "kube_node_status_condition{condition='Ready', status='true'}",
@@ -253,8 +253,8 @@
     {
       "id": "common-monitoring",
       "name": {
-        "ja": "監視基盤",
-        "en": "Monitoring"
+        "ja": "Metrics (Victoria Metrics)",
+        "en": "Metrics (Victoria Metrics)"
       },
       "prometheusQuery": [
         "(count(up{job='blackbox-http'} == 1) or vector(0)) > bool 0",
@@ -265,15 +265,15 @@
     {
       "id": "common-rum",
       "name": {
-        "ja": "RUM 収集",
-        "en": "RUM Collector"
+        "ja": "Real-User Monitoring (N-RUM)",
+        "en": "Real-User Monitoring (N-RUM)"
       },
       "prometheusQuery": "probe_http_status_code{env='production', service='next-rum'}",
       "categoryId": "common"
     },
     {
       "id": "common-delivery",
-      "name": "Media Proxy",
+      "name": "Media Proxy (NMD)",
       "prometheusQuery": "probe_http_status_code{endpoint='web', env='production', service='next-media-delivery'}",
       "categoryId": "common"
     }
