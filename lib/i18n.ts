@@ -10,6 +10,8 @@ const dict = {
     siteDescription:
       'はん（highemerly）が運営するサービス（個人が営む電気通信事業を含みます）の稼働状況一覧です。',
     contact: 'お問い合わせ',
+    contactNote: '本ページおよびサービスについてのお問い合わせは、{name}までお願いします。',
+    contactName: 'はん（highemerly）',
     anchorLabel: 'このサービスへのリンク',
     allOperational: 'すべてのサービスが正常に稼働しています',
     someDegraded: '一部のサービスで問題が発生しています',
@@ -40,7 +42,7 @@ const dict = {
       unknown: '不明',
     } as Record<ServiceStatus, string>,
     bucketTooltip: '{start} 〜 {end}',
-    autoReload: 'データは5分ごとに更新されます（表示の更新は再読み込みが必要です）',
+    autoReload: 'データは5分ごとに更新されます（表示の更新は再読み込みが必要です）。',
     version: 'バージョン',
     releaseNotes: 'リリースノート',
     releaseNotesFallback: '{tag} のリリースノート（{version} 単独のノートは未作成）',
@@ -50,12 +52,19 @@ const dict = {
     showDetails: '内訳を見る',
     hideDetails: '内訳を閉じる',
     legendBar: 'バー1本が{minutes}分を表します。',
+    dependencies: '依存するクラウドサービス',
+    dependenciesNote:
+      'これらのサービスは、以下のクラウドサービスに支えられています。各社の稼働状況は、下のリンクから確認できます。',
+    dependenciesInfra: '運用系',
+    dependenciesMonitoring: '監視系',
   },
   en: {
     siteTitle: 'Service Status',
     siteDescription:
       'Operational status of services run by Han (highemerly), including telecommunications services operated as an individual.',
     contact: 'Contact',
+    contactNote: 'For anything about this page or these services, please contact {name}.',
+    contactName: 'Han (highemerly)',
     anchorLabel: 'Link to this service',
     allOperational: 'All services are operational',
     someDegraded: 'Some services are experiencing issues',
@@ -96,6 +105,11 @@ const dict = {
     showDetails: 'Show breakdown',
     hideDetails: 'Hide breakdown',
     legendBar: 'Each bar covers {minutes} minutes. ',
+    dependencies: 'Dependencies',
+    dependenciesNote:
+      'These services are supported by the cloud providers below. You can check each provider’s own status from these links.',
+    dependenciesInfra: 'Running',
+    dependenciesMonitoring: 'Monitoring',
   },
 } as const;
 

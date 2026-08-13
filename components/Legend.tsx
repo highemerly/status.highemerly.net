@@ -39,8 +39,13 @@ export function Legend({
         ))}
       </ul>
 
+      {/*
+        バーの読み方と更新間隔は、どちらも「このタイムラインをどう読むか」の話。
+        更新間隔をフッターに置くとタイムラインから遠くて結び付かないので、ここに並べる。
+      */}
       <p className="mt-2.5 text-xs leading-relaxed text-fg-subtle">
         {fill(dict.legendBar, { minutes: bucketMinutes(hours, step) })}
+        {dict.autoReload}
       </p>
     </section>
   );

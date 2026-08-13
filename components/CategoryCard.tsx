@@ -1,9 +1,10 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { ServiceRow } from './ServiceRow';
 import { StatusBadge } from './StatusBadge';
 import { Timeline } from './Timeline';
+import { ExternalIcon } from './ExternalIcon';
 import {
   localized,
   mergeHistories,
@@ -19,14 +20,6 @@ import type {
   StatusPayload,
   VersionEntry,
 } from '@/lib/types';
-
-function ExternalIcon() {
-  return (
-    <svg viewBox="0 0 16 16" width="11" height="11" fill="currentColor" aria-hidden="true">
-      <path d="M6 2h8v8h-2V5.4L5.4 12 4 10.6 10.6 4H6z" />
-    </svg>
-  );
-}
 
 function LinkIcon() {
   return (
@@ -67,6 +60,10 @@ export function CategoryCard({
   const [expanded, setExpanded] = useState(false);
   const ref = useRef<HTMLElement>(null);
 
+  // スクロール要求。同じアンカーを続けて押しても効くよう真偽値ではなく回数で持つ
+  const [scrollRequest, setScrollRequest] = useState(0);
+  const navigated = useRef(false);
+
   /*
    * #handon-club のような指定で来たときは、そのサービスを開いた状態で見せる。
    *
@@ -77,13 +74,35 @@ export function CategoryCard({
     const apply = () => {
       if (decodeURIComponent(window.location.hash.slice(1)) !== category.id) return;
       setExpanded(true);
-      ref.current?.scrollIntoView({ block: 'start' });
+      setScrollRequest((n) => n + 1);
     };
 
     apply();
-    window.addEventListener('hashchange', apply);
-    return () => window.removeEventListener('hashchange', apply);
+
+    const onHashChange = () => {
+      navigated.current = true;
+      apply();
+    };
+    window.addEventListener('hashchange', onHashChange);
+    return () => window.removeEventListener('hashchange', onHashChange);
   }, [category.id]);
+
+  /*
+   * スクロールは「開いたあと」に測る。開くとカードが伸びて文書の高さが変わるので、
+   * 開く前に測ると下の方のカードでは文書の下端で止まり、対象が画面の中ほどに残る。
+   * 描画のあとに走らせるため、依存に scrollRequest を置いてここで実行する。
+   */
+  useLayoutEffect(() => {
+    if (scrollRequest === 0) return;
+
+    const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    ref.current?.scrollIntoView({
+      block: 'start',
+      // 読み込み時の移動は一瞬で済ませる。動かして見せたいのは、
+      // 表示中にアンカーを押したときだけ
+      behavior: navigated.current && !reduced ? 'smooth' : 'auto',
+    });
+  }, [scrollRequest]);
 
   const status = overallStatus(
     services.map((s) => payload.services[s.id]?.status ?? 'unknown')
