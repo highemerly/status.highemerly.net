@@ -9,6 +9,7 @@
  *  - 時間軸を 5 分境界に丸め、全サービスで同一の格子を共有する
  *  - 複数クエリを持つサービスは履歴もマージする（旧実装は先頭 1 本だけ見ていた）
  *  - 履歴を 1 点 1 文字にエンコードして 48 時間分を約 8KB に収める
+ *  - スクレイプ間隔で取得して 5 分に畳む（step=300 で撃つと 5 分に 1 点しか見ない）
  */
 
 const { S3Client, GetObjectCommand, PutObjectCommand } = require('@aws-sdk/client-s3');
@@ -30,6 +31,22 @@ const STATUS_KEY = process.env.STATUS_KEY || 'data/status.v1.json';
 
 const HISTORY_HOURS = parseInt(process.env.HISTORY_HOURS || '48', 10);
 const STEP_SECONDS = 300; // 5 分。フロントの表示単位と一致させる
+
+// Prometheus から取り出す粒度。出力の 5 分より細かくする。
+//
+// query_range は範囲を集計せず、評価時刻ごとに「直近の 1 サンプル」を返すだけ。
+// step=300 で撃つと 5 分ぶんのスクレイプのうち境界に一番近い 1 本しか見ず、
+// 途中の失敗が丸ごと消える（blackbox は 60 秒間隔なので 5 本中 4 本を捨てていた）。
+// ここで細かく取り、foldToStep() で 5 分に畳む。
+//
+// scrape_interval に合わせること。これより細かくしても新しい情報は増えず、
+// 粗くすると再び取りこぼす。
+const SUB_STEP_SECONDS = parseInt(process.env.SUB_STEP_SECONDS || '60', 10);
+const SUB_POINTS = STEP_SECONDS / SUB_STEP_SECONDS;
+if (!Number.isInteger(SUB_POINTS) || SUB_POINTS < 1) {
+  throw new Error(`SUB_STEP_SECONDS must be a divisor of ${STEP_SECONDS}: ${SUB_STEP_SECONDS}`);
+}
+
 const QUERY_TIMEOUT_MS = parseInt(process.env.QUERY_TIMEOUT_MS || '10000', 10);
 
 const PROMETHEUS_URL_PARAM = process.env.PROMETHEUS_URL_PARAM || '/status-page/prometheus/url';
@@ -57,7 +74,15 @@ exports.handler = async () => {
     getConfigFromS3(),
   ]);
 
-  const grid = { startSec, endSec, points, step: STEP_SECONDS };
+  // 出力の 1 点 i は「その時刻で終わる 5 分間」を表す。
+  // 細かい格子はそのぶん手前（4 サブステップ）から始める。
+  const grid = {
+    startSec, endSec, points, step: STEP_SECONDS,
+    subStep: SUB_STEP_SECONDS,
+    subPoints: SUB_POINTS,
+    fineStartSec: startSec - (SUB_POINTS - 1) * SUB_STEP_SECONDS,
+    finePoints: points * SUB_POINTS,
+  };
   const results = await Promise.all(
     config.services.map((service) => buildServiceEntry(prometheus, service, grid))
   );
@@ -140,10 +165,12 @@ async function buildServiceEntry(prometheus, service, grid) {
 }
 
 /**
- * 複数コンポーネントのステータスをマージする。
+ * ステータスをマージする。コンポーネント間にも、5 分内の時刻間にも使う。
  *
  * 旧実装は「1 つでも up なら up」だったため、一部が落ちていても
  * 全体が正常と表示されていた。ここでは全体が揃って初めて up とする。
+ *
+ * unknown（欠測）は判定に含めない。全部 unknown のときだけ unknown。
  */
 function mergeStatuses(statuses) {
   const known = statuses.filter((s) => s && s !== 'unknown');
@@ -159,40 +186,60 @@ function mergeStatuses(statuses) {
  * ------------------------------------------------------------------ */
 
 /**
- * query_range を叩き、結果を固定長の格子（配列）に載せて返す。
+ * query_range を細かい step で叩き、5 分の格子（配列）に畳んで返す。
  *
  * Prometheus は step で刻んだ点を返すが、欠測があると点が飛ぶ。
  * 位置合わせを添字任せにせず、必ずタイムスタンプで引き当てる。
  */
 async function fetchHistoryOnGrid(prometheus, query, grid) {
-  const filled = new Array(grid.points).fill('unknown');
+  const fine = new Array(grid.finePoints).fill('unknown');
 
   const json = await prometheusRequest(prometheus, 'query_range', {
     query,
-    start: String(grid.startSec),
+    start: String(grid.fineStartSec),
     end: String(grid.endSec),
-    step: String(grid.step),
+    step: String(grid.subStep),
   });
 
   const series = json?.data?.result;
-  if (!Array.isArray(series) || series.length === 0) return filled;
+  if (!Array.isArray(series) || series.length === 0) return foldToStep(fine, grid);
 
   // 同一クエリが複数系列を返すこともある（instance 違いなど）。時刻ごとにまとめる
   const byTime = new Map();
   for (const s of series) {
     for (const [ts, valueStr] of s.values || []) {
-      const slot = Math.round((ts - grid.startSec) / grid.step);
-      if (slot < 0 || slot >= grid.points) continue;
+      const slot = Math.round((ts - grid.fineStartSec) / grid.subStep);
+      if (slot < 0 || slot >= grid.finePoints) continue;
       if (!byTime.has(slot)) byTime.set(slot, []);
       byTime.get(slot).push(statusFromValue(parseFloat(valueStr)));
     }
   }
 
   for (const [slot, statuses] of byTime) {
-    filled[slot] = mergeStatuses(statuses);
+    fine[slot] = mergeStatuses(statuses);
   }
 
-  return filled;
+  return foldToStep(fine, grid);
+}
+
+/**
+ * 細かい格子を 5 分の格子に畳む。
+ *
+ * 出力の点 i は fine[i*subPoints .. i*subPoints+subPoints-1]、
+ * すなわち「時刻 startSec + i*step で終わる 5 分間」に対応する。
+ *
+ * 畳み方はコンポーネント間のマージと同じ規則にする。
+ * 5 分ぶんが全部 up なら up、全部 down なら down、混ざれば degraded。
+ * down になるのは 5 分間ずっと落ちていたときだけで、
+ * 単発の失敗は degraded として残る（旧: 境界の 1 本しか見ず、そもそも消えていた）。
+ */
+function foldToStep(fine, grid) {
+  const coarse = new Array(grid.points);
+  for (let i = 0; i < grid.points; i++) {
+    const from = i * grid.subPoints;
+    coarse[i] = mergeStatuses(fine.slice(from, from + grid.subPoints));
+  }
+  return coarse;
 }
 
 /**

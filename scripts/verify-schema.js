@@ -1,6 +1,8 @@
 // 新スキーマのサイズと、格子・マージロジックの検証
 
 const STEP = 300;
+const SUB_STEP = 60;
+const SUB_POINTS = STEP / SUB_STEP;
 const CODE = { up: '1', down: '0', degraded: 'd', unknown: '-' };
 const SERVICE_IDS = [
   'handon-web', 'handon-streaming', 'handon-media', 'handon-search',
@@ -14,6 +16,14 @@ function mergeStatuses(statuses) {
   if (known.every((s) => s === 'up')) return 'up';
   if (known.every((s) => s === 'down')) return 'down';
   return 'degraded';
+}
+
+function foldToStep(fine, points) {
+  const coarse = new Array(points);
+  for (let i = 0; i < points; i++) {
+    coarse[i] = mergeStatuses(fine.slice(i * SUB_POINTS, (i + 1) * SUB_POINTS));
+  }
+  return coarse;
 }
 
 // --- 1. マージロジック --------------------------------------------------
@@ -55,7 +65,41 @@ for (const [ts] of returned) {
 console.log(`格子: ${filled.map((s) => CODE[s]).join('')}  (期待 11--11)`);
 if (filled.map((s) => CODE[s]).join('') !== '11--11') ok = false;
 
-// --- 4. サイズ比較 ------------------------------------------------------
+// --- 4. 5 分への畳み込み ------------------------------------------------
+// query_range は範囲を集計せず評価時刻ごとの直近 1 サンプルを返すだけなので、
+// step=300 で撃つと 5 分に 1 点しか見ない。scrape_interval で取って畳む。
+console.log('\n--- 5 分への畳み込み (60s × 5 点) ---');
+const foldCases = [
+  [['up', 'up', 'up', 'up', 'up'], 'up'],
+  [['up', 'up', 'down', 'up', 'up'], 'degraded'],       // 途中 1 回だけ失敗
+  [['up', 'up', 'up', 'up', 'down'], 'degraded'],       // 境界で失敗
+  [['down', 'up', 'up', 'up', 'up'], 'degraded'],       // 旧: 境界が up なので消えていた
+  [['down', 'down', 'down', 'down', 'down'], 'down'],   // 5 分続いて初めて down
+  [['unknown', 'unknown', 'up', 'up', 'up'], 'up'],     // 欠測は判定に含めない
+  [['unknown', 'unknown', 'unknown', 'unknown', 'unknown'], 'unknown'],
+];
+for (const [input, expected] of foldCases) {
+  const got = foldToStep(input, 1)[0];
+  const pass = got === expected;
+  if (!pass) ok = false;
+  console.log(
+    `${pass ? 'PASS' : 'FAIL'}  fold([${input.map((s) => CODE[s]).join('')}]) = ` +
+    `${CODE[got]} ${got}  (期待 ${expected})`
+  );
+}
+
+// 畳んでも出力の点数は変わらない（サイズは 5 分格子のまま）
+{
+  const points = 6;
+  const fine = new Array(points * SUB_POINTS).fill('up');
+  fine[7] = 'down'; // 2 点目 (i=1) の途中で 1 回失敗
+  const got = foldToStep(fine, points).map((s) => CODE[s]).join('');
+  const pass = got === '1d1111';
+  if (!pass) ok = false;
+  console.log(`${pass ? 'PASS' : 'FAIL'}  ${points * SUB_POINTS} 点 -> ${got}  (期待 1d1111)`);
+}
+
+// --- 5. サイズ比較 ------------------------------------------------------
 console.log('\n--- サイズ比較 (12サービス) ---');
 
 function newFormat(hours) {
@@ -91,7 +135,7 @@ console.log(`旧形式 48h : ${kb(oldFormat(48))}`);
 console.log(`新形式 48h : ${kb(newFormat(48))}   <- 目標`);
 console.log(`\n削減率: ${(100 - (newFormat(48).length / oldFormat(48).length) * 100).toFixed(1)}%`);
 
-// --- 5. 表示期間の切り出し ----------------------------------------------
+// --- 6. 表示期間の切り出し ----------------------------------------------
 console.log('\n--- 期間切替 (末尾を切るだけ) ---');
 const h48 = '1'.repeat(576);
 for (const hours of [1, 3, 12, 24, 48]) {
