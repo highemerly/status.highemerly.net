@@ -152,6 +152,7 @@
         "max(sidekiq_queue_latency_seconds{service='handon', env='production'}) < bool 180",
         "max(sidekiq_queue_latency_seconds{service='handon', env='production'}) < bool 900"
       ],
+      "latencyQuery": "max(sidekiq_queue_latency_seconds{service='handon', env='production'})",
       "categoryId": "handon-club"
     },
     {
