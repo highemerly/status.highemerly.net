@@ -149,7 +149,7 @@ export function CategoryCard({
           <span className="flex shrink-0 flex-col items-end gap-1">
             <StatusBadge status={status} dict={dict} />
             {rate !== null && (
-              <span className="text-xs tabular-nums text-fg-subtle">
+              <span title={dict.uptime} className="text-xs tabular-nums text-fg-subtle">
                 {rate.toFixed(rate === 100 ? 0 : 2)}%
               </span>
             )}

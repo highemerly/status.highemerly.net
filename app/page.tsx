@@ -19,8 +19,6 @@ import type {
   VersionsPayload,
 } from '@/lib/types';
 
-const RELOAD_INTERVAL_MS = 5 * 60 * 1000;
-
 export default function HomePage() {
   const { lang, setLang, theme, setTheme, ready } = usePreferences();
   const dict = getDict(lang);
@@ -71,23 +69,11 @@ export default function HomePage() {
     }
   }, []);
 
+  // 取得は初回のみ。開きっぱなしのタブから 5 分ごとにリクエストが飛ぶと
+  // CloudFront のリクエスト課金が積み上がるため、定期更新は持たせない。
+  // データ自体は Lambda が 5 分ごとに更新しているので、再読み込みで最新になる。
   useEffect(() => {
     load();
-
-    // ページ全体をリロードせず、データだけ取り直す。
-    // 表示期間やスクロール位置が保たれる。
-    const timer = setInterval(load, RELOAD_INTERVAL_MS);
-
-    // タブに戻ってきたら、次の定期更新を待たずに追いつく
-    const onVisible = () => {
-      if (document.visibilityState === 'visible') load();
-    };
-    document.addEventListener('visibilitychange', onVisible);
-
-    return () => {
-      clearInterval(timer);
-      document.removeEventListener('visibilitychange', onVisible);
-    };
   }, [load]);
 
   const overall = status
