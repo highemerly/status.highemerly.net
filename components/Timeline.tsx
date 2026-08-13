@@ -20,6 +20,7 @@ export function Timeline({
   lang,
   dict,
   compact = false,
+  uptime,
 }: {
   history: string;
   hours: RangeHours;
@@ -31,6 +32,12 @@ export function Timeline({
    * 詳細を開いたときにどちらの粒度かひと目で分かるようにする。
    */
   compact?: boolean;
+  /*
+   * 稼働率。目盛りと同じ行の中央に出す。
+   * バーの真下に置くと、その数字がどの期間を要約したものか位置で分かる。
+   * compact のときは目盛りごと出さないので無視される。
+   */
+  uptime?: number | null;
 }) {
   const buckets = useMemo(
     () => toBuckets(history, hours, payload),
@@ -89,6 +96,14 @@ export function Timeline({
       {!compact && (
         <div className="mt-1 flex justify-between text-[11px] tabular-nums text-fg-subtle">
           <span>{formatTime(first.start, lang, withDate)}</span>
+
+          {/* 時刻より少しだけ強くする。同じ濃さだと 3 つめの時刻に見える */}
+          {uptime !== null && uptime !== undefined && (
+            <span title={dict.uptime} className="font-medium text-fg-muted">
+              {uptime.toFixed(uptime === 100 ? 0 : 2)}%
+            </span>
+          )}
+
           <span>{formatTime(last.end, lang, withDate)}</span>
         </div>
       )}

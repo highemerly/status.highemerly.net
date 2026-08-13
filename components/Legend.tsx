@@ -25,7 +25,7 @@ export function Legend({
   dict: Dict;
 }) {
   return (
-    <section className="rounded-lg border border-line bg-surface px-4 py-3 sm:px-5">
+    <section>
       <SectionHeading className="mb-2.5">{dict.legend}</SectionHeading>
 
       <ul className="flex flex-wrap gap-x-5 gap-y-2">

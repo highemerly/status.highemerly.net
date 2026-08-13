@@ -107,52 +107,61 @@ export function CategoryCard({
     >
       <div className="px-4 py-3.5 sm:px-5">
         <div className="flex items-center gap-2">
-          <button
-            type="button"
-            onClick={() => setExpanded((open) => !open)}
-            aria-expanded={expanded}
-            className="flex min-w-0 flex-1 items-center gap-2 rounded text-left"
-          >
-            <svg
-              viewBox="0 0 16 16"
-              width="12"
-              height="12"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              aria-hidden="true"
-              className={`shrink-0 text-fg-subtle transition-transform ${
-                expanded ? 'rotate-90' : ''
-              }`}
+          {/*
+            アンカーはサービス名のすぐ右に置く。行末に離して置くと
+            どの名前を指すリンクなのか分からない。
+            開閉ボタンを flex-1 にすると間が空いてしまうので、
+            余白はこのまとまりの外（spacer）で吸収する
+          */}
+          <div className="flex min-w-0 items-center gap-1">
+            <button
+              type="button"
+              onClick={() => setExpanded((open) => !open)}
+              aria-expanded={expanded}
+              className="flex min-w-0 items-center gap-2 rounded text-left"
             >
-              <path d="m5 3 6 5-6 5" />
-            </svg>
+              <svg
+                viewBox="0 0 16 16"
+                width="12"
+                height="12"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                aria-hidden="true"
+                className={`shrink-0 text-fg-subtle transition-transform ${
+                  expanded ? 'rotate-90' : ''
+                }`}
+              >
+                <path d="m5 3 6 5-6 5" />
+              </svg>
 
-            <h3 className="min-w-0 truncate text-base font-semibold">
-              {localized(category.name, lang)}
-            </h3>
-          </button>
+              <h3 className="min-w-0 truncate text-base font-semibold">
+                {localized(category.name, lang)}
+              </h3>
+            </button>
 
-          {/* このサービスだけを指す URL を作れるようにする */}
-          <a
-            href={`#${category.id}`}
-            title={dict.anchorLabel}
-            aria-label={dict.anchorLabel}
-            className="shrink-0 rounded p-1 text-fg-subtle/50 transition-colors hover:text-accent"
-          >
-            <LinkIcon />
-          </a>
+            {/* このサービスだけを指す URL を作れるようにする */}
+            <a
+              href={`#${category.id}`}
+              title={dict.anchorLabel}
+              aria-label={dict.anchorLabel}
+              className="shrink-0 rounded p-1 text-fg-subtle/50 transition-colors hover:text-accent"
+            >
+              <LinkIcon />
+            </a>
+          </div>
 
-          {/* 状態と稼働率は行を分ける。並べると数字がどちらの値か読み取りにくい */}
-          <span className="flex shrink-0 flex-col items-end gap-1">
+          <span className="flex-1" />
+
+          {/*
+            稼働率はここに積まない。バッジはパディングを持つので、
+            右揃えしても文字の右端が揃わず、ずれて見える。
+            数字は要約元であるバーの真下（Timeline の目盛り行）に置く
+          */}
+          <span className="shrink-0">
             <StatusBadge status={status} dict={dict} />
-            {rate !== null && (
-              <span title={dict.uptime} className="text-xs tabular-nums text-fg-subtle">
-                {rate.toFixed(rate === 100 ? 0 : 2)}%
-              </span>
-            )}
           </span>
         </div>
 
@@ -215,6 +224,7 @@ export function CategoryCard({
             payload={payload}
             lang={lang}
             dict={dict}
+            uptime={rate}
           />
         </div>
       </div>
