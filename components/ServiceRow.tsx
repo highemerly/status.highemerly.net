@@ -25,7 +25,8 @@ export function ServiceRow({
   const rate = entry ? uptime(entry.h, hours, payload.step) : null;
 
   return (
-    <div className="py-3">
+    // pl-5 はカテゴリ総合のバー（CategoryCard）と同じ。名前もバーも左端を揃える
+    <div className="py-3 pl-5">
       <div className="flex items-center justify-between gap-3">
         <div className="flex min-w-0 items-center gap-2">
           <StatusIcon status={status} size={11} />
@@ -45,8 +46,7 @@ export function ServiceRow({
         </div>
       </div>
 
-      {/* pl-5 はサービス総合のバー（CategoryCard）と同じ。左端を揃える */}
-      <div className="mt-2 pl-5">
+      <div className="mt-2">
         {entry ? (
           <Timeline
             history={entry.h}
@@ -54,6 +54,7 @@ export function ServiceRow({
             payload={payload}
             lang={lang}
             dict={dict}
+            compact
           />
         ) : (
           <p className="text-xs text-fg-subtle">{dict.noData}</p>

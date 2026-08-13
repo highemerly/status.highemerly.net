@@ -19,12 +19,18 @@ export function Timeline({
   payload,
   lang,
   dict,
+  compact = false,
 }: {
   history: string;
   hours: RangeHours;
   payload: Pick<StatusPayload, 'step' | 'to'>;
   lang: Lang;
   dict: Dict;
+  /*
+   * コンポーネント単位のバー。カテゴリ総合のバーより低くして、
+   * 詳細を開いたときにどちらの粒度かひと目で分かるようにする。
+   */
+  compact?: boolean;
 }) {
   const buckets = useMemo(
     () => toBuckets(history, hours, payload),
@@ -63,7 +69,7 @@ export function Timeline({
           </div>
         )}
 
-        <div className="flex h-8 items-stretch gap-px" role="img"
+        <div className={`flex items-stretch gap-px ${compact ? 'h-3.5' : 'h-8'}`} role="img"
           aria-label={fill(dict.bucketTooltip, {
             start: formatTime(first.start, lang, withDate),
             end: formatTime(last.end, lang, withDate),
@@ -79,10 +85,13 @@ export function Timeline({
         </div>
       </div>
 
-      <div className="mt-1 flex justify-between text-[11px] tabular-nums text-fg-subtle">
-        <span>{formatTime(first.start, lang, withDate)}</span>
-        <span>{formatTime(last.end, lang, withDate)}</span>
-      </div>
+      {/* 目盛りはカテゴリ総合のバーにだけ出す。全行に同じ時刻が並ぶと読みにくい */}
+      {!compact && (
+        <div className="mt-1 flex justify-between text-[11px] tabular-nums text-fg-subtle">
+          <span>{formatTime(first.start, lang, withDate)}</span>
+          <span>{formatTime(last.end, lang, withDate)}</span>
+        </div>
+      )}
     </div>
   );
 }
