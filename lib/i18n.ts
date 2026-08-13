@@ -49,7 +49,7 @@ const dict = {
     legend: '凡例',
     showDetails: '内訳を見る',
     hideDetails: '内訳を閉じる',
-    legendBar: 'バー1本は{minutes}分ぶんを表します。その間に一度でも問題があれば、悪いほうの色になります。',
+    legendBar: 'バー1本が{minutes}分を表します。',
   },
   en: {
     siteTitle: 'Service Status',
@@ -95,7 +95,7 @@ const dict = {
     legend: 'Legend',
     showDetails: 'Show breakdown',
     hideDetails: 'Hide breakdown',
-    legendBar: 'Each bar covers {minutes} minutes. If anything went wrong during that window, the bar shows the worse state.',
+    legendBar: 'Each bar covers {minutes} minutes. ',
   },
 } as const;
 
