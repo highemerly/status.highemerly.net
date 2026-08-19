@@ -1,5 +1,5 @@
 {
-  "updatedAt": "2026-08-17T21:42:23.631Z",
+  "updatedAt": "2026-08-19T21:42:04.942Z",
   "categories": {
     "handon-club": {
       "version": "4.6.6",
@@ -24,8 +24,8 @@
       }
     },
     "hosteka": {
-      "version": "1.4.14",
-      "imageTag": "1.4.14"
+      "version": "1.4.18",
+      "imageTag": "1.4.18"
     },
     "shamezo": {
       "version": "1.4.6",
