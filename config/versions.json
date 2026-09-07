@@ -1,5 +1,5 @@
 {
-  "updatedAt": "2026-09-01T23:19:32.523Z",
+  "updatedAt": "2026-09-07T23:30:31.104Z",
   "categories": {
     "handon-club": {
       "version": "4.7.1",
@@ -28,8 +28,8 @@
       "imageTag": "1.4.18"
     },
     "shamezo": {
-      "version": "1.4.6",
-      "imageTag": "1.4.6",
+      "version": "1.4.7",
+      "imageTag": "1.4.7",
       "release": {
         "name": "1.4",
         "tag": "v1.4.0",
