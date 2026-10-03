@@ -1,5 +1,5 @@
 {
-  "updatedAt": "2026-10-02T00:48:14.677Z",
+  "updatedAt": "2026-10-03T23:47:01.423Z",
   "categories": {
     "handon-club": {
       "version": "4.7.3",
@@ -13,13 +13,13 @@
       }
     },
     "hiyoko-club": {
-      "version": "2026.9.0",
-      "imageTag": "2026.9.0",
+      "version": "2026.10.0",
+      "imageTag": "2026.10.0",
       "release": {
-        "name": "2026.9.0",
-        "tag": "2026.9.0",
-        "url": "https://github.com/misskey-dev/misskey/releases/tag/2026.9.0",
-        "publishedAt": "2026-09-06T11:19:39Z",
+        "name": "2026.10.0",
+        "tag": "2026.10.0",
+        "url": "https://github.com/misskey-dev/misskey/releases/tag/2026.10.0",
+        "publishedAt": "2026-10-01T09:35:44Z",
         "exact": true
       }
     },
