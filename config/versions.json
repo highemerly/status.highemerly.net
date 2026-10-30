@@ -1,14 +1,14 @@
 {
-  "updatedAt": "2026-10-25T23:17:13.901Z",
+  "updatedAt": "2026-10-30T01:01:26.377Z",
   "categories": {
     "handon-club": {
-      "version": "4.7.3",
-      "imageTag": "4.7.3-20261025142219",
+      "version": "4.7.4",
+      "imageTag": "4.7.4-20261029222006",
       "release": {
-        "name": "v4.7.3",
-        "tag": "v4.7.3",
-        "url": "https://github.com/mastodon/mastodon/releases/tag/v4.7.3",
-        "publishedAt": "2026-10-01T14:09:40Z",
+        "name": "v4.7.4",
+        "tag": "v4.7.4",
+        "url": "https://github.com/mastodon/mastodon/releases/tag/v4.7.4",
+        "publishedAt": "2026-10-29T14:00:06Z",
         "exact": true
       }
     },
