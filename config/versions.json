@@ -1,14 +1,14 @@
 {
-  "updatedAt": "2026-11-03T02:55:26.691Z",
+  "updatedAt": "2026-11-04T01:23:24.991Z",
   "categories": {
     "handon-club": {
-      "version": "4.7.4",
-      "imageTag": "4.7.4-20261029222006",
+      "version": "4.7.5",
+      "imageTag": "4.7.5-20261103224730",
       "release": {
-        "name": "v4.7.4",
-        "tag": "v4.7.4",
-        "url": "https://github.com/mastodon/mastodon/releases/tag/v4.7.4",
-        "publishedAt": "2026-10-29T14:00:06Z",
+        "name": "v4.7.5",
+        "tag": "v4.7.5",
+        "url": "https://github.com/mastodon/mastodon/releases/tag/v4.7.5",
+        "publishedAt": "2026-11-03T15:28:59Z",
         "exact": true
       }
     },
@@ -24,12 +24,12 @@
       }
     },
     "hosteka": {
-      "version": "2.0.0-rc4",
-      "imageTag": "2.0.0-rc4"
+      "version": "2.0.0",
+      "imageTag": "2.0.0"
     },
     "shamezo": {
-      "version": "1.5.2",
-      "imageTag": "1.5.2",
+      "version": "1.5.3",
+      "imageTag": "1.5.3",
       "release": {
         "name": "1.5",
         "tag": "v1.5.0",
