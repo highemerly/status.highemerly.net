@@ -1,5 +1,5 @@
 {
-  "updatedAt": "2026-11-07T00:56:50.823Z",
+  "updatedAt": "2026-11-09T00:55:26.965Z",
   "categories": {
     "handon-club": {
       "version": "4.7.5",
@@ -28,13 +28,13 @@
       "imageTag": "2.0.7"
     },
     "shamezo": {
-      "version": "1.5.5",
-      "imageTag": "1.5.5",
+      "version": "1.5.6",
+      "imageTag": "1.5.6",
       "release": {
-        "name": "v1.5.5",
-        "tag": "v1.5.5",
-        "url": "https://github.com/highemerly/movapic-neo/releases/tag/v1.5.5",
-        "publishedAt": "2026-11-05T23:59:52Z",
+        "name": "v1.5.6",
+        "tag": "v1.5.6",
+        "url": "https://github.com/highemerly/movapic-neo/releases/tag/v1.5.6",
+        "publishedAt": "2026-11-08T14:26:59Z",
         "exact": true
       }
     },
