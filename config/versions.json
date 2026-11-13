@@ -1,5 +1,5 @@
 {
-  "updatedAt": "2026-11-11T01:14:58.123Z",
+  "updatedAt": "2026-11-13T01:50:27.665Z",
   "categories": {
     "handon-club": {
       "version": "4.7.5",
@@ -13,34 +13,34 @@
       }
     },
     "hiyoko-club": {
-      "version": "2026.10.1",
-      "imageTag": "2026.10.1",
+      "version": "2026.11.0",
+      "imageTag": "2026.11.0",
       "release": {
-        "name": "2026.10.1",
-        "tag": "2026.10.1",
-        "url": "https://github.com/misskey-dev/misskey/releases/tag/2026.10.1",
-        "publishedAt": "2026-10-23T23:34:05Z",
+        "name": "2026.11.0",
+        "tag": "2026.11.0",
+        "url": "https://github.com/misskey-dev/misskey/releases/tag/2026.11.0",
+        "publishedAt": "2026-11-12T03:50:38Z",
         "exact": true
       }
     },
     "hosteka": {
-      "version": "2.1.0",
-      "imageTag": "2.1.0"
+      "version": "2.1.1",
+      "imageTag": "2.1.1"
     },
     "shamezo": {
-      "version": "1.6.1",
-      "imageTag": "1.6.1",
+      "version": "1.7.0",
+      "imageTag": "1.7.0",
       "release": {
-        "name": "v1.6.1",
-        "tag": "v1.6.1",
-        "url": "https://github.com/highemerly/movapic-neo/releases/tag/v1.6.1",
-        "publishedAt": "2026-11-10T14:00:47Z",
+        "name": "v1.7.0",
+        "tag": "v1.7.0",
+        "url": "https://github.com/highemerly/movapic-neo/releases/tag/v1.7.0",
+        "publishedAt": "2026-11-12T15:02:08Z",
         "exact": true
       }
     },
     "anypost": {
-      "version": "3.0.3",
-      "imageTag": "3.0.3"
+      "version": "3.1.0",
+      "imageTag": "3.1.0"
     },
     "dominion": {
       "version": "2026052601",
