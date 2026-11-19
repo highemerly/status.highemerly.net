@@ -1,5 +1,5 @@
 {
-  "updatedAt": "2026-11-18T02:54:29.844Z",
+  "updatedAt": "2026-11-19T02:34:42.733Z",
   "categories": {
     "handon-club": {
       "version": "4.7.5",
@@ -43,8 +43,8 @@
       "imageTag": "3.1.0"
     },
     "dominion": {
-      "version": "2026052601",
-      "imageTag": "2026052601"
+      "version": "2.13.0",
+      "imageTag": "2.13.0"
     }
   }
 }
